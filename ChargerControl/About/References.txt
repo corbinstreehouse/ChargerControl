@@ -1,0 +1,172 @@
+
+	embedXcode
+	----------------------------------
+	Embedded Computing Template on Xcode 4.3
+
+	mpideXcode
+	----------------------------------
+	Embedded Computing Project on Xcode 4.3
+
+
+	© Rei VILO, 2010-2012
+	CC = BY NC SA
+
+
+	• Documentation
+	http://embedXcode.weebly.com/
+	
+	• GitHub repositories
+	https://github.com/rei-vilo/embedXcode
+	https://github.com/rei-vilo/mpideXcode
+
+
+References
+----------------------------------
+	
+Feb 28, 2009 - Robert Atkins
+	• Using Arduino in Xcode
+	http://robertcarlsen.net/2009/02/28/using-arduino-in-xcode-532
+
+Jun 04, 2010 - Martin Oldfield
+	• A Makefile for Arduino Sketches
+	http://bleaklow.com/2010/06/04/a_makefile_for_arduino_sketches.html
+	http://bleaklow.com/files/2010/Makefile.master
+	
+Oct 18, 2010 - #define FALSE TRUE
+	• How to compile AVR-Code with Mac OSX 
+	http://www.definefalsetrue.com/index.php/en/AVR/how-to-compile-avr-code-with-mac-osx.html
+
+Jan 06, 2011 - Rei Vilo
+	• Thread UPDATE - Linker Problem — Arduino Uno and Xcode 
+	http://arduino.cc/forum/index.php/topic,49956.0.html
+
+Feb 16, 2011 - Rei Vilo
+	• Arduino makefile for Xcode - master
+	http://github.com/rei-vilo/Xcode-for-MPIDE-Arduino
+
+Mar 11, 2011 - borealkiss 
+	• A minimal project template for Xcode 4
+	http://blog.boreal-kiss.net/2011/03/11/a-minimal-project-template-for-xcode-4/
+	https://github.com/borealkiss/Minimal-Template
+
+Mar 21, 2011 - Adam / red-glasses
+	• Making custom templates for Xcode 4 – March 2011
+	http://blog.red-glasses.com/index.php/tutorials/making-custom-templates-for-xcode-4-march-2011/
+
+Apr 01, 2011 - Maik Schmidt
+	• Advanced Arduino Hacking
+	http://pragprog.com/magazines/2011-04/advanced-arduino-hacking
+	https://github.com/maik/pragpub
+
+Jun 08, 2011 - Ben Scheirman
+	• Fixing Xcode 4’s Broken Code Completion
+	http://benscheirman.com/2011/06/fixing-xcode-4s-broken-code-completion
+
+Jun 23, 2011 - Martin Oldfield
+	• Arduino from the command line
+	http://mjo.tc/atelier/2009/02/arduino-cli.html
+	http://mjo.tc/atelier/2009/02/acli/arduino-mk_0.6.tar.gz
+
+Jul 01, 2011 - Rei Vilo
+	• Arduino makefile for Xcode - master
+	http://embedXcode.weebly.com/arduino/20--arduino-makefile-for-xcode
+
+Jul 21, 2011 - svofski
+	• MPLAB X project configurations for stk500v2 bootloader
+	http://www.chipkit.cc/forum/viewtopic.php?p=1285#p1285
+	http://pastebin.com/31XXwmUV
+
+Jul 30, 2011 - Nick
+	• Programming Arduino with Xcode
+	http://makesomecode.com/2010/07/30/programming-arduino-with-xcode/
+	
+Aug 25, 2011 - Jens Willy Johannsen
+	• Minimal AVR project template for Xcode
+	http://stackoverflow.com/questions/6976500/avr-for-xcode-4
+
+Oct 11, 2011 - Álvaro Justen - Turicas	
+	• Arduino makefile
+	https://github.com/turicas/arduinoMakefile/blob/master/resources.markdown
+
+Nov 01, 2011 - Амперка - amperka
+	• A command line toolkit for working with Arduino hardware
+	http://arduino.cc/forum/index.php/topic,77458.0.html
+	https://github.com/amperka/ino
+
+Nov 12, 2011 - Tim Knapen
+	• Arduino with Xcode
+	https://github.com/timknapen/Arduino-With-XCode
+	
+Nov 15, 2011 — gnu.org, collective 
+	• Make documentation 
+	http://www.gnu.org/software/make/manual/html_node/index.html
+	• Using the GNU Compiler Collection
+	http://gcc.gnu.org/onlinedocs/gcc-4.6.2/gcc/
+
+Dec 04, 2011 - Rei Vilo
+	• Initial repository closed
+	http://github.com/rei-vilo/Xcode-for-MPIDE-Arduino
+	• Trunk continued by Tim Knapen
+	https://github.com/timknapen/Arduino-With-XCode
+	• Master cloned by gnimmel
+	https://github.com/gnimmel/Xcode-for-MPIDE-Arduino
+
+Dec 09, 2011 - Christopher Peplin
+	• chipKIT Compatible Arduino-based Makefile
+	http://christopherpeplin.com/2011/12/chipkit-arduino-makefile
+	https://github.com/peplin/arduino.mk
+	
+Dec 21, 2011 - Ricklon
+	• MPIDE 0023 mpide-0023-macosx-20111221
+	https://github.com/chipKIT32/chipKIT32-MAX/downloads
+
+Jan 11, 2012 - Mattias Wadman
+	• Xcode 4 external build system code completion
+	http://stackoverflow.com/questions/8726869/xcode-4-external-build-system-code-completion
+
+Jan 12, 2012 - fabiankr
+	• New IDE for Mac OS X written in Cocoa
+	http://arduino.cc/forum/index.php/topic,86028.0.html
+
+Jan 16, 2012 - Rei Vilo
+	• Arduino with Xcode - fork
+	https://github.com/rei-vilo/Arduino-With-XCode
+	
+Jan 22, 2012 - Rei Vilo
+	• MPIDE on Xcode 4.2 - release a : initial release
+	https://github.com/rei-vilo/mpideXcode
+
+Feb 02, 2012 - Rei Vilo
+	• MPIDE on Xcode 4.2 -  release b - chipKIT operational
+	https://github.com/rei-vilo/mpideXcode
+
+Feb 04, 2012 - Rei Vilo
+	• MPIDE on Xcode 4.2 -  release c - code-sense operational
+	https://github.com/rei-vilo/mpideXcode
+
+Feb 06, 2012 - Rei Vilo
+	• MPIDE on Xcode 4.2 -  release d - user libraries
+	https://github.com/rei-vilo/mpideXcode
+
+Feb 06, 2012 - Rei Vilo
+	• MPIDE on Xcode 4.2 -  release e - code checking while typing with Index as target
+	https://github.com/rei-vilo/mpideXcode
+
+Feb 08, 2012 - Rei Vilo
+	• MPIDE on Xcode 4.2 -  release f - code-sense, click-to-error with standard targets
+	https://github.com/rei-vilo/mpideXcode
+
+Feb 10, 2012 - Rei Vilo
+	• Embedded Computing on Xcode 4.2 -  release g - multi-application, check-as-you-type, template
+	https://github.com/rei-vilo/embedXcode
+
+Mar 18, 2012 - Robert Wessel
+	• Energia = Arduino IDE ported to TI LaunchPad MSP430
+	https://github.com/energia/Energia
+
+Apr 05, 2012 — Rei Vilo
+	• New website
+	http://embedXcode.weebly.com/
+
+----------------------------------
+End of file

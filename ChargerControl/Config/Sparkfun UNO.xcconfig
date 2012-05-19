@@ -1,0 +1,16 @@
+//
+//  Board config file
+//  ----------------------------------
+//  Developed with embedXcode
+//  Copyright (c) 2012 http://embedXcode.weebly.com. All rights reserved.
+//
+//  mpideXcode8
+//
+
+BOARD_TAG  = pro5v328
+BOARD_PORT = /dev/tty.usbserial-A40084mc
+
+// References for Xcode code-sense
+//
+GCC_PREPROCESSOR_DEFINITIONS = __AVR_ATmega328P__
+HEADER_SEARCH_PATHS = $(ARDUINO_APP)/** $(SKETCHBOOK_DIR)/Libraries/**

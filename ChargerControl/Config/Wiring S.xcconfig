@@ -1,0 +1,15 @@
+//
+//  Board config file
+//  ----------------------------------
+//  Developed with embedXcode
+//  Copyright (c) 2012 http://embedXcode.weebly.com . All rights reserved.
+//
+//  mpideXcode8
+//
+
+BOARD_TAG  = WiringS
+
+// References for Xcode code-sense
+//
+GCC_PREPROCESSOR_DEFINITIONS = __AVR_ATmega644P__
+HEADER_SEARCH_PATHS = $(WIRING_APP)/** $(SKETCHBOOK_DIR)/Libraries/**

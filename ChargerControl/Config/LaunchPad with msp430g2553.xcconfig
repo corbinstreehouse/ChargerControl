@@ -1,0 +1,18 @@
+//
+//  Board config file
+//  ----------------------------------
+//
+//  LaunchPad with msp430g2553.xcconfig
+//  mpideXcode10
+//
+//  Created by Rei VILO on 27/03/12.
+//  Copyright (c) 2012 http://embedXcode.weebly.com . All rights reserved.
+//
+
+BOARD_TAG  = lpmsp430g2553
+BOARD_PORT = /dev/tty.uart*
+
+// References for Xcode code-sense
+//
+GCC_PREPROCESSOR_DEFINITIONS = __MSP430G2553__  
+HEADER_SEARCH_PATHS = $(ENERGIA_APP)/** $(SKETCHBOOK_DIR)/Libraries/**

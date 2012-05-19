@@ -1,0 +1,20 @@
+//
+//  chipKIT Uno32.xcconfig 
+//  Board config file
+//  ----------------------------------
+//  Developed with embedXcode
+//
+//  Project mpideXcode12
+//  Created by Rei VILO on 16/04/12
+//  Copyright (c) 2012 http://embedXcode.weebly.com
+//
+
+
+BOARD_TAG  = uno_pic32
+BOARD_PORT = /dev/tty.usbserial*
+
+// References for Xcode code-sense
+//
+GCC_PREPROCESSOR_DEFINITIONS = __32MX320F128H__
+HEADER_SEARCH_PATHS = $(MPIDE_APP)/** $(SKETCHBOOK_DIR)/Libraries/**
+	
