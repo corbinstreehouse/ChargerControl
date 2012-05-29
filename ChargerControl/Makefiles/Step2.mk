@@ -160,7 +160,7 @@ SYS_OBJS      = $(wildcard $(patsubst %,%/*.o,$(APP_LIBS))) # */
 SYS_OBJS     += $(wildcard $(patsubst %,%/*.o,$(BUILD_APP_LIBS))) # */
 SYS_OBJS     += $(wildcard $(patsubst %,%/*.o,$(USER_LIBS))) # */
 
-CPPFLAGS      = -$(MCU_FLAG_NAME)=$(MCU) -DF_CPU=$(F_CPU) -I. -I$(CORE_LIB_PATH) \
+CPPFLAGS      = -$(MCU_FLAG_NAME)=$(MCU) -DF_CPU=$(F_CPU) -I. -I$(CORE_LIB_PATH) -DARDUINO=101  \
 			$(SYS_INCLUDES) -g -Os -w -Wall -ffunction-sections -fdata-sections $(EXTRA_CPPFLAGS)
 
 ifdef USE_GNU99

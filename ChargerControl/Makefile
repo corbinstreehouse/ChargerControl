@@ -20,7 +20,7 @@
 #APP_LIBS_LIST = Wire Wire/utility/Energia EEPROM Ethernet Ethernet/utility \
 	SPI Firmata LiquidCrystal Matrix Sprite SD SD/utility Servo SoftwareSerial Stepper 
 
-APP_LIBS_LIST = 
+APP_LIBS_LIST = Wire Wire/utility
 
 # List users libraries here 
 #
@@ -33,7 +33,7 @@ APP_LIBS_LIST =
 	MatrixMath MsTimer2 Serial_GPS pic32_RTC \
 	DWIFIcK DWIFIcK/Utility 
 
-USER_LIBS_LIST = 
+USER_LIBS_LIST = Adafruit_RGB_LCD_Shield_Library Time/Time RTClib
 
 
 MAKEFILE_PATH = $(CURDIR)/Makefiles

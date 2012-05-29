@@ -12,6 +12,16 @@
 // Core library
 #include  "Arduino.h" // — for Arduino 1.0
 
+/*********************
+ 
+ Example code for the Adafruit RGB Character LCD Shield and Library
+ 
+ This code displays text on the shield, and also reads the buttons on the keypad.
+ When a button is pressed, the backlight changes color.
+ 
+ **********************/
+
+// include the library code:
 #include <Wire.h>
 #include <Adafruit_MCP23017.h>
 #include <Adafruit_RGBLCDShield.h>
@@ -19,78 +29,13 @@
 #include "LCDDatePicker.h"
 #include "RTClib.h"
 
-#define DEBUG 1
 
 #include <Time.h>  
 
-#include "CrbMenu.h"
+#define TIME_MSG_LEN  11   // time sync to PC is HEADER followed by unix time_t as ten ascii digits
+#define TIME_HEADER  'T'   // Header tag for serial time sync message
+#define TIME_REQUEST  7    // ASCII bell character requests a time sync message 
 
-
-#define LCD_COLUMNS 16
-#define LDC_ROWS 2
-
-// The shield uses the I2C SCL and SDA pins. On classic Arduinos
-// this is Analog 4 and 5 so you can't use those for analogRead() anymore
-// However, you can connect other I2C sensors to the I2C bus and share
-// the I2C bus.
-Adafruit_RGBLCDShield g_lcd = Adafruit_RGBLCDShield();
-CrbMenu g_menu;
-
-// The menu item structure
-/*
- 
- 
- 
- 
-    Setup
-        1. Set Timer Start Time
-        2. Set Timer Duration
-        3. Set Clock
-        
-
- 
- 
- 
- 
-*/
-
-CrbMenuItem g_rootItem = CrbMenuItem("Setup");
-    CrbMenuItem g_itemSetTimerStartTime = CrbMenuItem("Set Timer Start");
-    CrbMenuItem g_itemSetTimerDuration = CrbMenuItem("Set Timer Duration");
-    CrbMenuItem g_itemSetClock = CrbMenuItem("Set Clock");
-
-
-
-void setup() {
-#if DEBUG
-    Serial.begin(9600);
-#endif
-    Serial.println("setup"); 
-    
-    g_lcd.begin(LCD_COLUMNS, LDC_ROWS);
-    g_lcd.clear();
-    g_lcd.print("hello");
-    
-    g_rootItem.addChild(&g_itemSetTimerStartTime);
-    g_rootItem.addChild(&g_itemSetTimerDuration);
-    g_rootItem.addChild(&g_itemSetClock);
-    
-    g_menu.init(&g_lcd, &g_rootItem);
-    g_menu.print();
-    
-    
-}
-
-void loop() {
-    g_menu.loopOnce();
-}
-
-
-
-
-
-
-/*
 time_t requestSync();
 
 void processSyncMessage();
@@ -119,25 +64,52 @@ void printDigits(int digits){
     Serial.print(digits);
 }
 
-time_t requestSync() {
-    DateTime now = RTC.now();
-    return now.
+void processSyncMessage() {
+    
+    // if time sync available from serial port, update time and return true
+    while(Serial.available() >=  TIME_MSG_LEN ){  // time message consists of a header and ten ascii digits
+        char c = Serial.read() ; 
+        Serial.print(c);  
+        if( c == TIME_HEADER ) {       
+            time_t pctime = 0;
+            for(int i=0; i < TIME_MSG_LEN -1; i++){   
+                c = Serial.read();          
+                if( c >= '0' && c <= '9'){   
+                    pctime = (10 * pctime) + (c - '0') ; // convert digits to a number    
+                }
+            }   
+            setTime(pctime);   // Sync Arduino clock to the time received on the serial port
+        }  
+    }
+}
+
+time_t requestSync()
+{
+    // TODO: get the time from the RTC
+    
+    Serial.print(TIME_REQUEST,DEC);  
     return 0; // the time will be sent later in response to serial mesg
 }
 
 
 
+// The shield uses the I2C SCL and SDA pins. On classic Arduinos
+// this is Analog 4 and 5 so you can't use those for analogRead() anymore
+// However, you can connect other I2C sensors to the I2C bus and share
+// the I2C bus.
+Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
 
 
 
-
+#define LCD_COLUMNS 16
+#define LDC_ROWS 2
 
 
 void setup() {
+    // Debugging output
+    Serial.begin(9600);
 
-
-    setSyncProvider(requestSync);
-    
+    setSyncProvider( requestSync);  //set function to call when sync required
     Serial.println("Waiting for sync message");
 
     
@@ -149,9 +121,14 @@ void setup() {
     // TODO: get the initial time from the RTC
     
     
-
-//    Serial.print("\n\n");
-//    Serial.print("Took "); Serial.print(time); Serial.println(" ms");
+    // Print a message to the LCD. We track how long it takes since
+    // this library has been optimized a bit and we're proud of it :)
+    int time = millis();
+    lcd.print("Hello, world!");
+    time = millis() - time;
+    
+    Serial.print("\n\n");
+    Serial.print("Took "); Serial.print(time); Serial.println(" ms");
     // lcd.setBacklight(BLUE);
     
     lcd.setCursor(0, 1);
@@ -226,6 +203,10 @@ void loop() {
         
     }
     
+//    if(Serial.available() ) 
+//    {
+//        processSyncMessage();
+//    }
 //    if(timeStatus()!= timeNotSet)   
 //    {
 //        digitalWrite(13,timeStatus() == timeSet); // on if synced, off if needs refresh  
@@ -233,6 +214,3 @@ void loop() {
 //    }
    // delay(1000);    
 }
-
-*/
-
