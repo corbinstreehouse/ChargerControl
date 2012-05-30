@@ -16,13 +16,14 @@
 #include <Adafruit_MCP23017.h>
 #include <Adafruit_RGBLCDShield.h>
 
-#include "LCDDatePicker.h"
-#include "RTClib.h"
+#include <DS1307RTC.h>  // a basic DS1307 library that returns time as a time_t
 #include <EEPROM.h>
+#include <Time.h>  
+
+#include "LCDDatePicker.h"
+
 
 #define DEBUG 1
-
-#include <Time.h>  
 
 #include "CrbMenu.h"
 
@@ -81,13 +82,6 @@ Enter to accept
  
 */
 
-
-CrbMenuItem g_itemSettings = CrbMenuItem("Settings >", NULL);
-    CrbMenuItem g_itemSetStartTime = CrbMenuItem("Set start time >", NULL);
-    CrbMenuItem g_itemSetTimerDuration = CrbMenuItem("Set timer duration >", NULL);
-    CrbMenuItem g_itemSetClock = CrbMenuItem("Set date/time >", NULL);
-
-
 // enums take 2 bytes, which sucks, so I typedef it to a uint8_t
 enum _ChargingMode {
     ChargingModeNormal = 0,
@@ -95,17 +89,20 @@ enum _ChargingMode {
 };
 typedef uint8_t ChargingMode;
 
+// Global charging state
 ChargingMode g_chargingMode;
 CrbMenuItem *g_rootItem;
 
 // EEPROM locations we read/write
 #define EE_CHARGING_MODE_LOCATION 0
 
-void ChargingModeChangedAction(CrbMenuItem *sender) {
-    g_chargingMode = sender->getTag();
-
+void ChargingModeChangedAction(CrbActionMenuItem *sender) {
     // TODO: move this into the menu class, if it makes more sense there and i need it again
     if (!sender->hasOption(CrbMenuItemOptionSelected)) {
+        // Update the global and write it out
+        g_chargingMode = sender->getTag();
+        EEPROM.write(EE_CHARGING_MODE_LOCATION, g_chargingMode);
+        
         sender->addOption(CrbMenuItemOptionSelected);
         // remove the option from the other menu items
         CrbMenuItem *parent = sender->getParent();
@@ -120,23 +117,18 @@ void ChargingModeChangedAction(CrbMenuItem *sender) {
     }
 }
 
-void setup() {
-#if DEBUG
-    Serial.begin(9600);
-    Serial.println("setup"); 
-#endif
+static void ChargingSaveStartTimeAction(CrbTimeSetMenuItem *sender) {
     
+}
+
+static inline void setupMenu() {
     g_lcd.begin(LCD_COLUMNS, LDC_ROWS);
     g_lcd.clear();
     
-    g_rootItem = new CrbMenuItem("Charging Enabled", NULL);
-    CrbMenuItem *chargingModeItem = new CrbMenuItem("Charging Mode >", NULL);
-    CrbMenuItem *itemNormalChargingMode = new CrbMenuItem("Normal charging", ChargingModeChangedAction);
-    itemNormalChargingMode->setTag(ChargingModeNormal);
-    
-    CrbMenuItem *itemTimedChargingMode = new CrbMenuItem("Timed charging", ChargingModeChangedAction);
-    itemTimedChargingMode->setTag(ChargingModeTimed);
-    
+    g_rootItem = new CrbMenuItem("Charging Enabled");
+    CrbMenuItem *chargingModeItem = new CrbMenuItem("Charging Mode >");
+    CrbMenuItem *itemNormalChargingMode = new CrbActionMenuItem("Normal charging", (CrbMenuItemAction) ChargingModeChangedAction, ChargingModeNormal);
+    CrbMenuItem *itemTimedChargingMode = new CrbActionMenuItem("Timed charging", (CrbMenuItemAction)ChargingModeChangedAction, ChargingModeTimed);
     
     g_rootItem->addChild(chargingModeItem);
     chargingModeItem->addChild(itemNormalChargingMode);
@@ -144,10 +136,6 @@ void setup() {
     
     // Restore the previous value
     g_chargingMode = EEPROM.read(EE_CHARGING_MODE_LOCATION);
-#if DEBUG
-    Serial.print("charging mode: ");
-    Serial.println(g_chargingMode);
-#endif
     
     // Validate values
     if (g_chargingMode > ChargingModeTimed) {
@@ -159,169 +147,42 @@ void setup() {
         itemTimedChargingMode->addOption(CrbMenuItemOptionSelected);
     }
     
-    g_rootItem->addChild(&g_itemSettings);
-        g_itemSettings.addChild(&g_itemSetStartTime);
-        g_itemSettings.addChild(&g_itemSetTimerDuration);
-        g_itemSettings.addChild(&g_itemSetClock);
+    CrbMenuItem *itemSettings = new CrbMenuItem("Settings >");
+    g_rootItem->addChild(itemSettings);
+    
+    // When this action 
+    CrbMenuItem *itemSetStartTime = new CrbMenuItem("Set start time >");
+    itemSettings->addChild(itemSetStartTime);
+    itemSetStartTime->addChild(new CrbTimeSetMenuItem("Start time", (CrbMenuItemAction)ChargingSaveStartTimeAction, 0));
+    
+    itemSettings->addChild(new CrbMenuItem("Set timer duration >"));
+    itemSettings->addChild(new CrbMenuItem("Set date/time >"));
     
     g_menu.init(&g_lcd, g_rootItem);
     g_menu.print();
-    
-    
+}
+
+static inline void setupTime() { 
+    setSyncProvider(RTC.get);   // the function to get the time from the RTC
+#if DEBUG
+    if (timeStatus() != timeSet) 
+        Serial.println("Unable to sync with the RTC");
+    else
+        Serial.println("RTC has set the system time");      
+#endif
+}
+
+void setup() {
+#if DEBUG
+    Serial.begin(9600);
+    Serial.println("setup"); 
+#endif
+    setupMenu();
+    setupTime();
 }
 
 void loop() {
     g_menu.loopOnce();
+
 }
-
-
-
-
-
-
-/*
-time_t requestSync();
-
-void processSyncMessage();
-void digitalClockDisplay();
-void printDigits(int digits);
-
-void digitalClockDisplay(){
-    // digital clock display of the time
-    Serial.print(hour());
-    printDigits(minute());
-    printDigits(second());
-    Serial.print(" ");
-    Serial.print(day());
-    Serial.print(" ");
-    Serial.print(month());
-    Serial.print(" ");
-    Serial.print(year()); 
-    Serial.println(); 
-}
-
-void printDigits(int digits){
-    // utility function for digital clock display: prints preceding colon and leading 0
-    Serial.print(":");
-    if(digits < 10)
-        Serial.print('0');
-    Serial.print(digits);
-}
-
-time_t requestSync() {
-    DateTime now = RTC.now();
-    return now.
-    return 0; // the time will be sent later in response to serial mesg
-}
-
-
-
-
-
-
-
-
-
-void setup() {
-
-
-    setSyncProvider(requestSync);
-    
-    Serial.println("Waiting for sync message");
-
-    
-    // set up the LCD's number of rows and columns: 
-    lcd.begin(LCD_COLUMNS, LDC_ROWS);
-    
-//    DateTime t = 
-    
-    // TODO: get the initial time from the RTC
-    
-    
-
-//    Serial.print("\n\n");
-//    Serial.print("Took "); Serial.print(time); Serial.println(" ms");
-    // lcd.setBacklight(BLUE);
-    
-    lcd.setCursor(0, 1);
-    lcd.print("corbin dunn");
-}
-
-RTC_DS1307 RTC;
-
-bool g_runClock = false;
-
-//uint8_t i=0;
-void loop() {
-    // set the cursor to column 0, line 1
-    // (note: line 1 is the second row, since counting begins with 0):
- //   lcd.setCursor(0, 1);
-//    lcd.setCursor(0, 1);
-//    lcd.print("corbin dunn");
-    // print the number of seconds since reset:
-  //  lcd.print(millis()/1000);
-    
-    uint8_t buttons = lcd.readButtons();
-    
-    if (buttons) {
-      // lcd.clear();
-        lcd.setCursor(0,0);
-        if (buttons & BUTTON_UP) {
-            lcd.print("UP ");
-            //lcd.setBacklight(RED);
-        }
-        if (buttons & BUTTON_DOWN) {
-            lcd.print("DOWN ");
-            //lcd.setBacklight(YELLOW);
-        }
-        if (buttons & BUTTON_LEFT) {
-            lcd.print("LEFT ");
-            //   lcd.setBacklight(GREEN);
-        }
-        if (buttons & BUTTON_RIGHT) {
-            lcd.print("RIGHT ");
-            // lcd.setBacklight(TEAL);
-        }
-        if (buttons & BUTTON_SELECT) {
-            lcd.print("SELECT ");
-            //lcd.clear();  
-            lcd.blink();
-            //lcd.setBacklight(VIOLET);
-            g_runClock = g_runClock ? 0 : 1;
-            
-            Serial.print("runclock:");
-            Serial.print(g_runClock               );
-            Serial.print("\n\n");
-                         
-        }
-    }
-    
-    if (g_runClock) {
-        // print the time
-        DateTime now = RTC.now();
-        
-        lcd.setCursor(0,0);
-        lcd.print(now.month(), DEC);
-        lcd.print('/');
-        lcd.print(now.day(), DEC);
-        lcd.print('/');
-        lcd.print(now.year() - 2000, DEC);
-        lcd.print(' ');
-        lcd.print(now.hour(), DEC);
-        lcd.print(':');
-        lcd.print(now.minute(), DEC);
-        lcd.print(':');
-        lcd.print(now.second(), DEC);
-        
-    }
-    
-//    if(timeStatus()!= timeNotSet)   
-//    {
-//        digitalWrite(13,timeStatus() == timeSet); // on if synced, off if needs refresh  
-////        digitalClockDisplay();  
-//    }
-   // delay(1000);    
-}
-
-*/
 

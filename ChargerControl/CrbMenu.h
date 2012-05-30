@@ -9,6 +9,10 @@
 #ifndef ChargerControl_CrbMenu_h
 #define ChargerControl_CrbMenu_h
 
+#include "Arduino.h"
+#include <Wire.h>
+#include <Time.h>  
+
 #include "Adafruit_RGBLCDShield.h"
 
 #define DEBUG_MENU 1 // Set to 1 to debug the setup and stuff
@@ -28,9 +32,6 @@ private:
     Adafruit_RGBLCDShield *_lcd;
     CrbMenuItem *_rootItem;
     CrbMenuItem *_currentItem;
-    
-    
-    void handleButton(uint8_t buttons);
 public:
     CrbMenu();
     
@@ -40,20 +41,19 @@ public:
 
     void print(); // Writes to the lcd
 
-    // manual control; these do nothing if there is no item available
+    // Each menu item may call into this class to do the actual work of navigating the menu structure
     void gotoPriorSibling(); // Go "up" 
     void gotoNextSibling(); // Go "down"
     void gotoParent(); // Go "left"  (aka: back)
     void gotoFirstChild(); // Go "right" (aka next)
+    
+    inline Adafruit_RGBLCDShield *getLCD() { return _lcd; }
 };
-
-typedef void (* CrbMenuItemAction)(CrbMenuItem *item);
 
 // This is just a simple linked list
 class CrbMenuItem {
 private:
 	const char *_name;
-    CrbMenuItemAction _action;
     
     CrbMenuItem *_parent; // The item we go "back" to
     CrbMenuItem *_priorSibling; // The previous sibling
@@ -61,38 +61,68 @@ private:
     CrbMenuItem *_child; // First child in the next group of menu items
 
     CrbMenuItemOption _options;
-    unsigned int _tag; // Maybe make this a void* pointer where we can fill in other stuff
-    
-protected: // For our friend CrbMenu to touch
-    inline CrbMenuItemAction getAction() { return _action; }
+protected:
+    // These can be overridden to make specific menu item actions that are done instead of the normal ones. By default, we just call back into CrbMenu to goto the prior/next, etc
+    virtual void handleUpButton(CrbMenu *sender);
+    virtual void handleDownButton(CrbMenu *sender);
+    virtual void handleLeftButton(CrbMenu *sender);
+    virtual void handleRightButton(CrbMenu *sender);
+    virtual void handleEnterButton(CrbMenu *sender);
 
-    friend class CrbMenu;
-    
+    virtual void printLine1(Adafruit_RGBLCDShield *lcd);
+    virtual void printLine2(Adafruit_RGBLCDShield *lcd);
+
+    friend class CrbMenu; // so it can access the above protected methods
 public:
-    CrbMenuItem(const char *name, CrbMenuItemAction action);
+    CrbMenuItem(const char *name);
     
 	inline CrbMenuItem *getParent() const { return _parent; }
 	inline CrbMenuItem *getPrior() const { return _priorSibling; }
 	inline CrbMenuItem *getNext() const { return _nextSibling; }
 	inline CrbMenuItem *getChild() const { return _child; }
 
-    inline int getTag() { return _tag; }
-    inline void setTag(int tag) { _tag = tag; }
-    
-//    inline void setAction(CrbMenuItemAction action) { _action = action; }
-    
-//    CrbMenuItem *addNextWithName(const char *name); // If _next is set, it searches till it finds a nil next and sets it
-//    CrbMenuItem *addChildWithName(const char *name);
-
     void addNext(CrbMenuItem *next); // If _next is set, it searches till it finds a nil next and sets it
     void addChild(CrbMenuItem *child);
-    
+#if DEBUG_MENU
 	inline const char *getName() const { return _name; }
+#endif
     inline void addOption(CrbMenuItemOption option) { _options = _options | option; }
     inline void removeOption(CrbMenuItemOption option) { _options = _options & ~option; }
     inline bool hasOption(CrbMenuItemOption option) { return (option & _options) != 0; }
 };
 
+typedef void (* CrbMenuItemAction)(CrbMenuItem *item);
+
+class CrbActionMenuItem : public CrbMenuItem {
+private:
+    CrbMenuItemAction _action;
+    unsigned int _tag;
+protected:
+    virtual void handleEnterButton(CrbMenu *sender);
+public:
+    // Fires the action on enter
+    CrbActionMenuItem(const char *name, CrbMenuItemAction action, int tag);
+    inline int getTag() { return _tag; }
+};
+
+class CrbTimeSetMenuItem : public CrbMenuItem {
+private:
+    CrbMenuItemAction _action;
+    time_t _time;
+    uint8_t _editLocation;
+protected:
+    void handleUpButton(CrbMenu *sender);
+    void handleDownButton(CrbMenu *sender);
+    void handleLeftButton(CrbMenu *sender);
+    void handleRightButton(CrbMenu *sender);
+    
+    void handleEnterButton(CrbMenu *sender);
+    void printLine2(Adafruit_RGBLCDShield *lcd);
+public:
+    time_t getTime() { return _time; }
+    // Fires the action on enter
+    CrbTimeSetMenuItem(const char *name, CrbMenuItemAction action, time_t time);
+};
 
 
 #endif

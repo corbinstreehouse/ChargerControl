@@ -33,7 +33,7 @@ APP_LIBS_LIST = Wire Wire/utility EEPROM
 	MatrixMath MsTimer2 Serial_GPS pic32_RTC \
 	DWIFIcK DWIFIcK/Utility 
 
-USER_LIBS_LIST = Adafruit_RGB_LCD_Shield_Library Time/Time RTClib
+USER_LIBS_LIST = Adafruit_RGB_LCD_Shield_Library Time/Time Time/TimeAlarms Time/DS1307RTC
 
 
 MAKEFILE_PATH = $(CURDIR)/Makefiles
