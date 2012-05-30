@@ -15,6 +15,14 @@
 
 class CrbMenuItem;
 
+enum _CrbMenuItemOptions {
+    // Selected items will have a * before the name to show it as selected
+    CrbMenuItemOptionSelected = 1 << 0,
+//    ChargingModeDisabled = 1 << 2,
+//    ChargingModeNotSet = 255,
+};
+typedef uint8_t CrbMenuItemOption;
+
 class CrbMenu {
 private:
     Adafruit_RGBLCDShield *_lcd;
@@ -39,33 +47,50 @@ public:
     void gotoFirstChild(); // Go "right" (aka next)
 };
 
+typedef void (* CrbMenuItemAction)(CrbMenuItem *item);
+
 // This is just a simple linked list
 class CrbMenuItem {
 private:
-	const char*_name;
+	const char *_name;
+    CrbMenuItemAction _action;
     
     CrbMenuItem *_parent; // The item we go "back" to
-    CrbMenuItem *_prior; // The previous sibling
-    CrbMenuItem *_next; // The next sibling (may be NULL, can be set as the first item in the list to have lists loop around)
-    CrbMenuItem *_firstChild; // First child in the next group of menu items    
+    CrbMenuItem *_priorSibling; // The previous sibling
+    CrbMenuItem *_nextSibling; // The next sibling (may be NULL, can be set as the first item in the list to have lists loop around)
+    CrbMenuItem *_child; // First child in the next group of menu items
 
+    CrbMenuItemOption _options;
+    unsigned int _tag; // Maybe make this a void* pointer where we can fill in other stuff
+    
 protected: // For our friend CrbMenu to touch
-	inline CrbMenuItem *getParent() const { return _parent; }
-	inline CrbMenuItem *getPrior() const { return _prior; }
-	inline CrbMenuItem *getNext() const { return _next; }
-	inline CrbMenuItem *getFirstChild() const { return _firstChild; }
+    inline CrbMenuItemAction getAction() { return _action; }
+
     friend class CrbMenu;
     
 public:
-    CrbMenuItem(const char *name);
+    CrbMenuItem(const char *name, CrbMenuItemAction action);
     
-    CrbMenuItem *addNextWithName(const char *name); // If _next is set, it searches till it finds a nil next and sets it
-    CrbMenuItem *addChildWithName(const char *name);
+	inline CrbMenuItem *getParent() const { return _parent; }
+	inline CrbMenuItem *getPrior() const { return _priorSibling; }
+	inline CrbMenuItem *getNext() const { return _nextSibling; }
+	inline CrbMenuItem *getChild() const { return _child; }
+
+    inline int getTag() { return _tag; }
+    inline void setTag(int tag) { _tag = tag; }
+    
+//    inline void setAction(CrbMenuItemAction action) { _action = action; }
+    
+//    CrbMenuItem *addNextWithName(const char *name); // If _next is set, it searches till it finds a nil next and sets it
+//    CrbMenuItem *addChildWithName(const char *name);
 
     void addNext(CrbMenuItem *next); // If _next is set, it searches till it finds a nil next and sets it
     void addChild(CrbMenuItem *child);
     
 	inline const char *getName() const { return _name; }
+    inline void addOption(CrbMenuItemOption option) { _options = _options | option; }
+    inline void removeOption(CrbMenuItemOption option) { _options = _options & ~option; }
+    inline bool hasOption(CrbMenuItemOption option) { return (option & _options) != 0; }
 };
 
 

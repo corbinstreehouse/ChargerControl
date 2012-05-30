@@ -20,7 +20,7 @@
 #APP_LIBS_LIST = Wire Wire/utility/Energia EEPROM Ethernet Ethernet/utility \
 	SPI Firmata LiquidCrystal Matrix Sprite SD SD/utility Servo SoftwareSerial Stepper 
 
-APP_LIBS_LIST = Wire Wire/utility
+APP_LIBS_LIST = Wire Wire/utility EEPROM
 
 # List users libraries here 
 #

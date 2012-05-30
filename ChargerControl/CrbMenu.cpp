@@ -11,41 +11,45 @@
 #include <Wire.h>
 
 
-CrbMenuItem::CrbMenuItem(const char *name) : _name(name) {
-    _parent = _prior = _next = _firstChild = 0;
+CrbMenuItem::CrbMenuItem(const char *name, CrbMenuItemAction action) : _name(name) {
+    _parent = _priorSibling = _nextSibling = _child = 0;
+    _options = 0;
+    _tag = 0;
+    _action = action;
 }
 
-CrbMenuItem *CrbMenuItem::addNextWithName(const char *name) {
-    CrbMenuItem *result = new CrbMenuItem(name);
-    this->addNext(result);
-    return result;
-}
 
-CrbMenuItem *CrbMenuItem::addChildWithName(const char *name) {
-    CrbMenuItem *result = new CrbMenuItem(name);
-    this->addChild(result);
-    return result;
-}
-
+//CrbMenuItem *CrbMenuItem::addNextWithName(const char *name) {
+//    CrbMenuItem *result = new CrbMenuItem(name);
+//    this->addNext(result);
+//    return result;
+//}
+//
+//CrbMenuItem *CrbMenuItem::addChildWithName(const char *name) {
+//    CrbMenuItem *result = new CrbMenuItem(name);
+//    this->addChild(result);
+//    return result;
+//}
+//
 void CrbMenuItem::addNext(CrbMenuItem *next) {
     CrbMenuItem *walker = this;
     // Fine the first item without a next
-    while (walker->_next) {
-        walker = walker->_next;
+    while (walker->_nextSibling) {
+        walker = walker->_nextSibling;
     }
     // doubly linked list forwards/backwards from that last child
-    walker->_next = next;
-    next->_prior = walker;
+    walker->_nextSibling = next;
+    next->_priorSibling = walker;
     next->_parent = _parent; // we have the same parent
 }
 
 void CrbMenuItem::addChild(CrbMenuItem *child) {
-    if (_firstChild == NULL) {
+    if (_child == NULL) {
         child->_parent = this;
-        _firstChild = child;
+        _child = child;
     } else {
         // Otherwise, add a next to the child to put it at the end of the children list for this item
-        _firstChild->addNext(child);
+        _child->addNext(child);
     }
 }
 
@@ -63,14 +67,31 @@ void CrbMenu::print() {
             _lcd->clear();
             _lcd->setCursor(0,0);
             // Print the parent item that we are on
-            _lcd->print("< ");
+            if (_currentItem->hasOption(CrbMenuItemOptionSelected)) {
+                _lcd->print("*");
+            }
             _lcd->print(_currentItem->getName());
-            _lcd->print("> ");
             
-            if (_currentItem->getNext()) {
-                _lcd->setCursor(0,1);
-                _lcd->print("  ");
-                _lcd->print(_currentItem->getNext()->getName());
+            _lcd->setCursor(0,1);
+            if (_currentItem->getPrior() && _currentItem->getNext()) {
+                if (_currentItem->getChild()) {
+                    _lcd->print("       [Up/Down]");
+                } else {
+                    // This is a menu item to choose
+                    _lcd->print(" [Up/Down|Enter]");
+                }
+            } else if (_currentItem->getPrior()) {
+                if (_currentItem->getChild()) {
+                    _lcd->print("            [Up]");
+                } else {
+                    _lcd->print("      [Up|Enter]");
+                }
+            } else if (_currentItem->getNext()) {
+                if (_currentItem->getChild()) {
+                    _lcd->print("          [Down]");
+                } else {
+                    _lcd->print("    [Down|Enter]");
+                }
             }
         } else {
 #if DEBUG_MENU
@@ -127,8 +148,8 @@ void CrbMenu::gotoFirstChild() {
 #if DEBUG_MENU
     Serial.println("goto first child");
 #endif
-    if (_currentItem->getFirstChild()) {
-        _currentItem = _currentItem->getFirstChild();
+    if (_currentItem->getChild()) {
+        _currentItem = _currentItem->getChild();
         this->print();
     }
 }
@@ -147,8 +168,13 @@ void CrbMenu::handleButton(uint8_t buttons) {
     } else if (buttons & BUTTON_RIGHT) {
         this->gotoFirstChild();
     } else if (buttons & BUTTON_SELECT) {
-        //            menu.use();
-        //            lcd.print("SELECT ");            
+        // Prefer to fire the action
+        if (_currentItem->getAction()) {
+            _currentItem->getAction()(_currentItem);
+        } else {
+            // Use it as an alias to goto the right
+            this->gotoFirstChild();
+        }
     }
 }
 
