@@ -108,39 +108,34 @@ public:
 class CrbTimeSetMenuItem : public CrbMenuItem {
 private:
     CrbMenuItemAction _action;
+protected:
     time_t _time;
     uint8_t _editLocation;
-protected:
+    
+    virtual bool canEditAMPM() { return true; }
+    
     void handleUpButton(CrbMenu *sender);
     void handleDownButton(CrbMenu *sender);
     void handleLeftButton(CrbMenu *sender);
     void handleRightButton(CrbMenu *sender);
     
     void handleEnterButton(CrbMenu *sender);
-    void printLine2(Adafruit_RGBLCDShield *lcd);
+    virtual void printLine2(Adafruit_RGBLCDShield *lcd);
+    virtual void updateCursorForLine2(Adafruit_RGBLCDShield *lcd);
 public:
     time_t getTime() { return _time; }
     // Fires the action on enter
     CrbTimeSetMenuItem(const char *name, CrbMenuItemAction action, time_t time);
 };
 
-class CrbDurationMenuItem : public CrbMenuItem {
-private:
-    CrbMenuItemAction _action;
-    time_t _duration;
-    uint8_t _editLocation;
+// This is really an int editing option with a min/max
+class CrbDurationMenuItem : public CrbTimeSetMenuItem {
 protected:
-    void handleUpButton(CrbMenu *sender);
-    void handleDownButton(CrbMenu *sender);
-    void handleLeftButton(CrbMenu *sender);
-    void handleRightButton(CrbMenu *sender);
-    
-    void handleEnterButton(CrbMenu *sender);
-    void printLine2(Adafruit_RGBLCDShield *lcd);
+    bool canEditAMPM() { return false; }
+//    void printLine2(Adafruit_RGBLCDShield *lcd);
+//    void updateCursorForLine2(Adafruit_RGBLCDShield *lcd);
 public:
-    time_t getDuration() { return _duration; }
-    // Fires the action on enter
-    CrbTimeSetMenuItem(const char *name, CrbMenuItemAction action, time_t duration);
+    CrbDurationMenuItem(const char *name, CrbMenuItemAction action, time_t time);
 };
 
 

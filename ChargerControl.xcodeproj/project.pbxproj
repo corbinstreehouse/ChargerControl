@@ -69,9 +69,7 @@
 		9D11E1D3156759730002D8A1 /* WProgram.h in Sources */ = {isa = PBXBuildFile; fileRef = 9D11E07A1567561A0002D8A1 /* WProgram.h */; };
 		9D11E1D4156759730002D8A1 /* WString.h in Sources */ = {isa = PBXBuildFile; fileRef = 9D11E07B1567561A0002D8A1 /* WString.h */; };
 		9DD4DA551574273C009DEAE0 /* CrbMenu.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9DD4DA541574273C009DEAE0 /* CrbMenu.cpp */; };
-		9DD4DA5C1574405D009DEAE0 /* LCDDatePicker.h in Sources */ = {isa = PBXBuildFile; fileRef = 9DD7F51D156775DC00563C33 /* LCDDatePicker.h */; };
 		9DD4DA5F1574405D009DEAE0 /* CrbMenu.h in Sources */ = {isa = PBXBuildFile; fileRef = 9DD4DA5715742748009DEAE0 /* CrbMenu.h */; };
-		9DD7F51C156775C900563C33 /* LCDDatePicker.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9DD7F51B156775C900563C33 /* LCDDatePicker.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -166,8 +164,6 @@
 		9D11E29E15675D350002D8A1 /* Libraries */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Libraries; path = ../../../Documents/Arduino/Libraries; sourceTree = "<group>"; };
 		9DD4DA541574273C009DEAE0 /* CrbMenu.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = CrbMenu.cpp; sourceTree = "<group>"; };
 		9DD4DA5715742748009DEAE0 /* CrbMenu.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CrbMenu.h; sourceTree = "<group>"; };
-		9DD7F51B156775C900563C33 /* LCDDatePicker.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = LCDDatePicker.cpp; sourceTree = "<group>"; };
-		9DD7F51D156775DC00563C33 /* LCDDatePicker.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LCDDatePicker.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -193,8 +189,6 @@
 			children = (
 				9D11DF3B156756180002D8A1 /* main.cpp */,
 				9D11DF3D156756180002D8A1 /* ChargerControl.pde */,
-				9DD7F51D156775DC00563C33 /* LCDDatePicker.h */,
-				9DD7F51B156775C900563C33 /* LCDDatePicker.cpp */,
 				9DD4DA5715742748009DEAE0 /* CrbMenu.h */,
 				9DD4DA541574273C009DEAE0 /* CrbMenu.cpp */,
 				9D11E16F1567561A0002D8A1 /* Makefile */,
@@ -606,7 +600,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				9DD4DA5C1574405D009DEAE0 /* LCDDatePicker.h in Sources */,
 				9DD4DA5F1574405D009DEAE0 /* CrbMenu.h in Sources */,
 				9D11E1A0156759730002D8A1 /* ChargerControl.pde in Sources */,
 				9D11E1AF156759730002D8A1 /* EEPROM.h in Sources */,
@@ -669,7 +662,6 @@
 				9D11E08F1567561A0002D8A1 /* Tone.cpp in Sources */,
 				9D11E0911567561A0002D8A1 /* WMath.cpp in Sources */,
 				9D11E0931567561A0002D8A1 /* WString.cpp in Sources */,
-				9DD7F51C156775C900563C33 /* LCDDatePicker.cpp in Sources */,
 				9DD4DA551574273C009DEAE0 /* CrbMenu.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

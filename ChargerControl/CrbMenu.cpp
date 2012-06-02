@@ -131,38 +131,50 @@ CrbTimeSetMenuItem::CrbTimeSetMenuItem(const char *name, CrbMenuItemAction actio
     _editLocation = EditingTimeLocationNotStarted;
 }
 
-void CrbTimeSetMenuItem::printLine2(Adafruit_RGBLCDShield *lcd) {
-    lcd->setCursor(0,1);
-    int timeHour = hour(_time);
+static void _CrbPrintHour(time_t time, Adafruit_RGBLCDShield *lcd) {
+    int timeHour = hour(time);
     int timeHourToPrint = timeHour > 12 ? timeHour - 12 : timeHour;
     if (timeHourToPrint < 10) {
         lcd->print("0");
     }
     lcd->print(timeHourToPrint);
-    lcd->print(":");
-    
-    int timeMinute = minute(_time);
+}
+
+static void _CrbPrintMinute(time_t time, Adafruit_RGBLCDShield *lcd) {
+    int timeMinute = minute(time);
     if (timeMinute < 10) {
         lcd->print("0");
     }
     lcd->print(timeMinute);
+
+}
+
+void CrbTimeSetMenuItem::printLine2(Adafruit_RGBLCDShield *lcd) {
+    lcd->setCursor(0,1);
+    _CrbPrintHour(_time, lcd);
     
-    if (timeHour > 12) {
-        lcd->print(" PM");
-    } else {
-        lcd->print(" AM");
+    lcd->print(":");
+    
+    _CrbPrintMinute(_time, lcd);
+    
+    if (this->canEditAMPM()) {
+        if (hour(_time) > 12) {
+            lcd->print(" PM");
+        } else {
+            lcd->print(" AM");
+        }
     }
     
     lcd->print(" [Enter]");
-    
 }
 
-static void updateCursorForTime(Adafruit_RGBLCDShield *lcd, uint8_t timeLocation) {
-    if (timeLocation == EditingTimeLocationNotStarted) {
+void CrbTimeSetMenuItem::updateCursorForLine2(Adafruit_RGBLCDShield *lcd) {
+    
+    if (_editLocation == EditingTimeLocationNotStarted) {
         lcd->noBlink();
     } else {
         // move to the right area, and then blink
-        switch (timeLocation) {
+        switch (_editLocation) {
             case EditingTimeLocationHour: {
                 lcd->setCursor(1, 1);  // 00
                 break;
@@ -211,7 +223,7 @@ void CrbTimeSetMenuItem::handleUpButton(CrbMenu *sender) {
     _time = makeTime(tm);
     // We don't clear the LCD (don't need to)
     this->printLine2(sender->getLCD());
-    updateCursorForTime(sender->getLCD(), _editLocation);
+    this->updateCursorForLine2(sender->getLCD());
 }
 
 void CrbTimeSetMenuItem::handleDownButton(CrbMenu *sender) {
@@ -219,7 +231,7 @@ void CrbTimeSetMenuItem::handleDownButton(CrbMenu *sender) {
     breakTime(_time, tm);
     
     if (_editLocation == EditingTimeLocationHour) {
-        if (tm.Hour > 2) {
+        if (tm.Hour > 1) {
             tm.Hour--; 
         } else {
             tm.Hour = 12; // wrap after 1
@@ -244,7 +256,7 @@ void CrbTimeSetMenuItem::handleDownButton(CrbMenu *sender) {
     _time = makeTime(tm);
     // We don't clear the LCD (don't need to)
     this->printLine2(sender->getLCD());
-    updateCursorForTime(sender->getLCD(), _editLocation);
+    this->updateCursorForLine2(sender->getLCD());
 }
 
 void CrbTimeSetMenuItem::handleLeftButton(CrbMenu *sender) {
@@ -252,10 +264,10 @@ void CrbTimeSetMenuItem::handleLeftButton(CrbMenu *sender) {
     if (_editLocation > EditingTimeLocationNotStarted) {
         _editLocation--;
         if (_editLocation < EditingTimeLocationHour) {
-            _editLocation = EditingTimeLocationAMPM; // wrap
+            _editLocation = this->canEditAMPM() ? EditingTimeLocationAMPM : EditingTimeLocationMinute; // wrap
         }
-        updateCursorForTime(sender->getLCD(), _editLocation);
-    } else {    
+        this->updateCursorForLine2(sender->getLCD());
+    } else {
         sender->gotoParent();
     }
 }
@@ -264,13 +276,12 @@ void CrbTimeSetMenuItem::handleRightButton(CrbMenu *sender) {
     // Implicitly starts editing if we aren't
     if (_editLocation > EditingTimeLocationNotStarted) {
         _editLocation++;
-        if (_editLocation > EditingTimeLocationAMPM) {
+        if (_editLocation > (this->canEditAMPM() ? EditingTimeLocationAMPM : EditingTimeLocationMinute)) {
             _editLocation = EditingTimeLocationHour; // wrap
         }
-        updateCursorForTime(sender->getLCD(), _editLocation);
+        this->updateCursorForLine2(sender->getLCD());
     }
 }
-
 
 void CrbTimeSetMenuItem::handleEnterButton(CrbMenu *sender) {
     // If not editing, start editing
@@ -281,172 +292,17 @@ void CrbTimeSetMenuItem::handleEnterButton(CrbMenu *sender) {
         _editLocation = EditingTimeLocationNotStarted;
         _action(this);
     }
-    updateCursorForTime(sender->getLCD(), _editLocation);
+    this->updateCursorForLine2(sender->getLCD());
 }
 
 
 
 #pragma mark - CrbDurationMenuItem
 
-CrbDurationMenuItem::CrbDurationMenuItem(const char *name, CrbMenuItemAction action, time_t time) : CrbMenuItem(name) {
-    _action = action;
-    _time = time;
-    _editLocation = EditingTimeLocationNotStarted;
-}
 
-void CrbDurationMenuItem::printLine2(Adafruit_RGBLCDShield *lcd) {
-    lcd->setCursor(0,1);
-    int timeHour = hour(_time);
-    int timeHourToPrint = timeHour > 12 ? timeHour - 12 : timeHour;
-    if (timeHourToPrint < 10) {
-        lcd->print("0");
-    }
-    lcd->print(timeHourToPrint);
-    lcd->print(":");
-    
-    int timeMinute = minute(_time);
-    if (timeMinute < 10) {
-        lcd->print("0");
-    }
-    lcd->print(timeMinute);
-    
-    if (timeHour > 12) {
-        lcd->print(" PM");
-    } else {
-        lcd->print(" AM");
-    }
-    
-    lcd->print(" [Enter]");
+CrbDurationMenuItem::CrbDurationMenuItem(const char *name, CrbMenuItemAction action, time_t time) : CrbTimeSetMenuItem(name, action, time) {
     
 }
-
-static void updateCursorForTime(Adafruit_RGBLCDShield *lcd, uint8_t timeLocation) {
-    if (timeLocation == EditingTimeLocationNotStarted) {
-        lcd->noBlink();
-    } else {
-        // move to the right area, and then blink
-        switch (timeLocation) {
-            case EditingTimeLocationHour: {
-                lcd->setCursor(1, 1);  // 00
-                break;
-            }
-            case EditingTimeLocationMinuteTens: {
-                lcd->setCursor(3, 1);  // 00:0
-                break;
-            }
-            case EditingTimeLocationMinute: {
-                lcd->setCursor(4, 1);  // 00:00
-                break;
-            }
-            case EditingTimeLocationAMPM: {
-                lcd->setCursor(7, 1);  // 00:00 AM
-                break;
-            }
-        }
-        lcd->blink();
-    }
-}
-
-void CrbDurationMenuItem::handleUpButton(CrbMenu *sender) {
-    tmElements_t tm;
-    breakTime(_time, tm);
-    
-    if (_editLocation == EditingTimeLocationHour) {
-        tm.Hour++;
-        if (tm.Hour > 12) {
-            tm.Hour = 1; // Wrap
-        }
-    } else if (_editLocation == EditingTimeLocationMinuteTens) {
-        tm.Minute += 10;
-        if (tm.Minute >= 60) {
-            tm.Minute -= 60;
-        }
-    } else if (_editLocation == EditingTimeLocationMinute) {
-        int min = tm.Minute % 10;
-        min++; 
-        if (min > 9) {
-            min = 0;
-        }
-        tm.Minute = floor(tm.Minute / 10)*10 + min;
-    } else if (_editLocation == EditingTimeLocationAMPM) {
-        tm.Hour += 12;
-    }
-    _time = makeTime(tm);
-    // We don't clear the LCD (don't need to)
-    this->printLine2(sender->getLCD());
-    updateCursorForTime(sender->getLCD(), _editLocation);
-}
-
-void CrbDurationMenuItem::handleDownButton(CrbMenu *sender) {
-    tmElements_t tm;
-    breakTime(_time, tm);
-    
-    if (_editLocation == EditingTimeLocationHour) {
-        if (tm.Hour > 2) {
-            tm.Hour--; 
-        } else {
-            tm.Hour = 12; // wrap after 1
-        }
-    } else if (_editLocation == EditingTimeLocationMinuteTens) {
-        int localMin = tm.Minute; // avoid unsigned so we can subtract 10 and compare to < 0
-        localMin -= 10;
-        if (localMin < 0) {
-            localMin += 60;
-        }
-        tm.Minute = localMin;
-    } else if (_editLocation == EditingTimeLocationMinute) {
-        int min = tm.Minute % 10;
-        min--; 
-        if (min < 0) {
-            min = 9;
-        }
-        tm.Minute = floor(tm.Minute / 10)*10 + min;
-    } else if (_editLocation == EditingTimeLocationAMPM) {
-        tm.Hour += 12;
-    }
-    _time = makeTime(tm);
-    // We don't clear the LCD (don't need to)
-    this->printLine2(sender->getLCD());
-    updateCursorForTime(sender->getLCD(), _editLocation);
-}
-
-void CrbDurationMenuItem::handleLeftButton(CrbMenu *sender) {
-    // Cancel editing
-    if (_editLocation > EditingTimeLocationNotStarted) {
-        _editLocation--;
-        if (_editLocation < EditingTimeLocationHour) {
-            _editLocation = EditingTimeLocationAMPM; // wrap
-        }
-        updateCursorForTime(sender->getLCD(), _editLocation);
-    } else {    
-        sender->gotoParent();
-    }
-}
-
-void CrbDurationMenuItem::handleRightButton(CrbMenu *sender) {
-    // Implicitly starts editing if we aren't
-    if (_editLocation > EditingTimeLocationNotStarted) {
-        _editLocation++;
-        if (_editLocation > EditingTimeLocationAMPM) {
-            _editLocation = EditingTimeLocationHour; // wrap
-        }
-        updateCursorForTime(sender->getLCD(), _editLocation);
-    }
-}
-
-
-void CrbDurationMenuItem::handleEnterButton(CrbMenu *sender) {
-    // If not editing, start editing
-    if (_editLocation == EditingTimeLocationNotStarted) {
-        _editLocation = EditingTimeLocationHour;
-    } else {
-        // Editing, stop editing and save
-        _editLocation = EditingTimeLocationNotStarted;
-        _action(this);
-    }
-    updateCursorForTime(sender->getLCD(), _editLocation);
-}
-
 
 
 #pragma mark -

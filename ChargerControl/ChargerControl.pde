@@ -18,10 +18,9 @@
 
 #include <DS1307RTC.h>  // a basic DS1307 library that returns time as a time_t
 #include <EEPROM.h>
+#include <avr/eeprom.h>
+
 #include <Time.h>  
-
-#include "LCDDatePicker.h"
-
 
 #define DEBUG 1
 
@@ -92,9 +91,16 @@ typedef uint8_t ChargingMode;
 // Global charging state
 ChargingMode g_chargingMode;
 CrbMenuItem *g_rootItem;
+time_t g_startTime;
+time_t g_duration;
 
 // EEPROM locations we read/write
 #define EE_CHARGING_MODE_LOCATION 0
+#define EE_CHARGING_DURATION_LOCATION 1 // Takes 4 bytes!
+#define EE_CHARGING_START_TIME 5 // Takes 4 bytes!
+#define EE_UNUSED 9 // free location
+
+
 
 void ChargingModeChangedAction(CrbActionMenuItem *sender) {
     // TODO: move this into the menu class, if it makes more sense there and i need it again
@@ -117,13 +123,33 @@ void ChargingModeChangedAction(CrbActionMenuItem *sender) {
     }
 }
 
-static void ChargingSaveStartTimeAction(CrbTimeSetMenuItem *sender) {
-    
+static inline void defaultsWriteTime(int location, time_t time) {
+    // time_t is an unsigned long; 32-bits
+    eeprom_write_dword((uint32_t *)location, time);
 }
 
-static void ChargingSaveDateAction(CrbTimeSetMenuItem *sender) {
-    
+static inline time_t defaultsReadTime(int location) {
+    return eeprom_read_dword((uint32_t *)location);
 }
+
+static void ChargingSaveStartTimeAction(CrbTimeSetMenuItem *sender) {
+    if (g_startTime != sender->getTime()) {
+        g_startTime = sender->getTime();
+        defaultsWriteTime(EE_CHARGING_START_TIME, g_startTime);
+    }
+}
+
+static void ChargingSaveDurationAction(CrbTimeSetMenuItem *sender) {
+    if (g_duration != sender->getTime()) {
+        g_duration = sender->getTime();
+        defaultsWriteTime(EE_CHARGING_DURATION_LOCATION, g_duration);
+    }
+}
+
+
+//static void ChargingSaveDateAction(CrbTimeSetMenuItem *sender) {
+//    
+//}
 
 static inline void setupMenu() {
     g_lcd.begin(LCD_COLUMNS, LDC_ROWS);
@@ -151,24 +177,31 @@ static inline void setupMenu() {
         itemTimedChargingMode->addOption(CrbMenuItemOptionSelected);
     }
     
+    g_startTime = defaultsReadTime(EE_CHARGING_START_TIME);
+    g_duration = defaultsReadTime(EE_CHARGING_DURATION_LOCATION);
+    // validate duration or the start time? 
+    
     CrbMenuItem *itemSettings = new CrbMenuItem("Settings >");
     g_rootItem->addChild(itemSettings);
     
     // When this action 
     CrbMenuItem *itemSetStartTime = new CrbMenuItem("Set start time >");
     itemSettings->addChild(itemSetStartTime);
-    itemSetStartTime->addChild(new CrbTimeSetMenuItem("Start time", (CrbMenuItemAction)ChargingSaveStartTimeAction, 0));
+    itemSetStartTime->addChild(new CrbTimeSetMenuItem("Start time", (CrbMenuItemAction)ChargingSaveStartTimeAction, g_startTime));
+
+    CrbMenuItem *itemTimerDuration = new CrbMenuItem("Set timer duration >");
+    itemSettings->addChild(itemTimerDuration);
+    itemTimerDuration->addChild(new CrbDurationMenuItem("Duration", (CrbMenuItemAction)ChargingSaveDurationAction, g_duration));
     
-    itemSettings->addChild(new CrbMenuItem("Set timer duration >"));
     
     // TODO: how to initialize these variables...so it is showing the current time/date when the menu is shown?
-    CrbMenuItem *itemSetDate = new CrbMenuItem("Set current date >");
-    itemSettings->addChild(itemSetDate);
-    itemSetDate->addChild(new CrbTimeSetMenuItem("Set the date", (CrbMenuItemAction)ChargingSaveDateAction, 0));
-
-    CrbMenuItem *itemSetTime = new CrbMenuItem("Set current time >");
-    itemSettings->addChild(itemSetTime);
-    itemSetDate->addChild(new CrbTimeSetMenuItem("Set the time", (CrbMenuItemAction)ChargingSaveDateAction, 0));
+//    CrbMenuItem *itemSetDate = new CrbMenuItem("Set current date >");
+//    itemSettings->addChild(itemSetDate);
+//    itemSetDate->addChild(new CrbTimeSetMenuItem("Set the date", (CrbMenuItemAction)ChargingSaveDateAction, 0));
+//
+//    CrbMenuItem *itemSetTime = new CrbMenuItem("Set current time >");
+//    itemSettings->addChild(itemSetTime);
+//    itemSetDate->addChild(new CrbTimeSetMenuItem("Set the time", (CrbMenuItemAction)ChargingSaveDateAction, 0));
     
     
     
