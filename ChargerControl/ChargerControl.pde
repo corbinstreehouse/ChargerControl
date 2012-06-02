@@ -121,6 +121,10 @@ static void ChargingSaveStartTimeAction(CrbTimeSetMenuItem *sender) {
     
 }
 
+static void ChargingSaveDateAction(CrbTimeSetMenuItem *sender) {
+    
+}
+
 static inline void setupMenu() {
     g_lcd.begin(LCD_COLUMNS, LDC_ROWS);
     g_lcd.clear();
@@ -156,7 +160,17 @@ static inline void setupMenu() {
     itemSetStartTime->addChild(new CrbTimeSetMenuItem("Start time", (CrbMenuItemAction)ChargingSaveStartTimeAction, 0));
     
     itemSettings->addChild(new CrbMenuItem("Set timer duration >"));
-    itemSettings->addChild(new CrbMenuItem("Set date/time >"));
+    
+    // TODO: how to initialize these variables...so it is showing the current time/date when the menu is shown?
+    CrbMenuItem *itemSetDate = new CrbMenuItem("Set current date >");
+    itemSettings->addChild(itemSetDate);
+    itemSetDate->addChild(new CrbTimeSetMenuItem("Set the date", (CrbMenuItemAction)ChargingSaveDateAction, 0));
+
+    CrbMenuItem *itemSetTime = new CrbMenuItem("Set current time >");
+    itemSettings->addChild(itemSetTime);
+    itemSetDate->addChild(new CrbTimeSetMenuItem("Set the time", (CrbMenuItemAction)ChargingSaveDateAction, 0));
+    
+    
     
     g_menu.init(&g_lcd, g_rootItem);
     g_menu.print();

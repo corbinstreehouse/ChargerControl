@@ -124,5 +124,25 @@ public:
     CrbTimeSetMenuItem(const char *name, CrbMenuItemAction action, time_t time);
 };
 
+class CrbDurationMenuItem : public CrbMenuItem {
+private:
+    CrbMenuItemAction _action;
+    time_t _duration;
+    uint8_t _editLocation;
+protected:
+    void handleUpButton(CrbMenu *sender);
+    void handleDownButton(CrbMenu *sender);
+    void handleLeftButton(CrbMenu *sender);
+    void handleRightButton(CrbMenu *sender);
+    
+    void handleEnterButton(CrbMenu *sender);
+    void printLine2(Adafruit_RGBLCDShield *lcd);
+public:
+    time_t getDuration() { return _duration; }
+    // Fires the action on enter
+    CrbTimeSetMenuItem(const char *name, CrbMenuItemAction action, time_t duration);
+};
+
+
 
 #endif
