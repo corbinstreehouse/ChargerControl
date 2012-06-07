@@ -12,13 +12,9 @@
 // Core library
 #include  "Arduino.h" // — for Arduino 1.0
 
-
-// Sketch
-#include "ChargerControl.pde"
-
 int main(void)
 {
-    init();
+    init(); // implemented in ChargerControl.cpp
     setup();
 
     

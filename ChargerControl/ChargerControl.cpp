@@ -410,6 +410,7 @@ static bool timedChargingShouldBeEnabled() {
 }
 
 static void stopCharging() {
+
     // Stop charging, because we are going to be unplugged
     // We "soft stop" the charger by sending it 5v; this kills it right away, and makes it stop drawing amps
     setChargerToMode(CHARGER_MODE_OFF);

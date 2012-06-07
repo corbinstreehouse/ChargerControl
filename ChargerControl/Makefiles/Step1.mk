@@ -16,13 +16,13 @@
 # Sketch unicity test and extension
 # ----------------------------------
 #
-ifeq ($(words $(wildcard *.pde) $(wildcard *.ino)), 0)
-    $(error No pde or ino sketch)
-endif
+#ifeq ($(words $(wildcard *.pde) $(wildcard *.ino)), 0)
+#    $(error No pde or ino sketch)
+#endif
 
-ifneq ($(words $(wildcard *.pde) $(wildcard *.ino)), 1)
-    $(error More than 1 pde or ino sketch)
-endif
+#ifneq ($(words $(wildcard *.pde) $(wildcard *.ino)), 1)
+#    $(error More than 1 pde or ino sketch)
+#endif
 
 
 ifneq ($(wildcard *.pde),)
@@ -30,7 +30,8 @@ ifneq ($(wildcard *.pde),)
 else ifneq ($(wildcard *.ino),)
     SKETCH_EXTENSION := ino
 else 
-    $(error Extension error)
+   # $(error Extension error)
+   SKETCH_EXTENSION = pde
 endif
 
 
