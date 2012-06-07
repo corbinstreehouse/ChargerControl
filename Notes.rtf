@@ -1,0 +1,134 @@
+{\rtf1\ansi\ansicpg1252\cocoartf1138\cocoasubrtf320
+{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\listtable{\list\listtemplateid1\listhybrid{\listlevel\levelnfc0\levelnfcn0\leveljc0\leveljcn0\levelfollow0\levelstartat1\levelspace360\levelindent0{\*\levelmarker \{decimal\}.}{\leveltext\leveltemplateid1\'02\'00.;}{\levelnumbers\'01;}\fi-360\li720\lin720 }{\listlevel\levelnfc4\levelnfcn4\leveljc0\leveljcn0\levelfollow0\levelstartat1\levelspace360\levelindent0{\*\levelmarker \{lower-alpha\}.}{\leveltext\leveltemplateid2\'02\'01.;}{\levelnumbers\'01;}\fi-360\li1440\lin1440 }{\listname ;}\listid1}}
+{\*\listoverridetable{\listoverride\listid1\listoverridecount0\ls1}}
+\margl1440\margr1440\vieww21900\viewh18420\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+
+\f0\fs24 \cf0 Arduino Manzanita Micro PFC Charger Control\
+\
+
+\b NOTE: should I get a 12v-> 5v step down for the vin of the thing?\
+
+\b0 \
+Need: \
+* connection to LCD display so I can put it further away (possibly)\
+* connection mechanism for the external wires\
+\
+External connects:\
+\
+AC input gnd\
+12v (car battery)\
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+\cf0 12v gnd\
+12v from AC-DC converter\
+pilot signal\
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+\cf0 proximity signal\
+manzanita + 5v (pin 1)\
+manzanita off (pin 2)\
+BMS vsource out\
+BMS HLIM input\
+--------\
+Total:  10 inputs/outputs\
+\
+I want:\
+1. Easy plugin from manzanita micro charger (using a telephone jack thing) (these are 2 inputs)\
+2. Wire in and screw down for the rest\
+3. Wire out for the LCD display (unless I have it put in there permanently, which is my current plan)\
+\
+\
+\
+\
+\
+\
+\
+\
+PIN_BMS_POWER (currently 4) will turn on the BMS via relay. The BMS is powered by the AC-DC converter.\
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+\cf0 PIN_EVSE_PILOT (currently 5) will be used to turn the pilot signal on and off (to open/close the EVSE contractor)\
+PIN_CHARGER_OFF (currently 6) will be used by Arduino to send 5V to turn off the charger when doing timed charging, or when unplugged (hopefully the current amount doesn't matter)\
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+\cf0 PIN_ARDUINO_OFF  (currently 7) will turn off the Arduino via the Pololu Push Button power\
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+\cf0 PIN_EVSE_PROXIMITY  A0 (input). will be used to read if the proximity signal is open/closed when the latch on the plug is pressed so we can stop charging\
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+\cf0 \
+
+\b When initially turned on, the boot process:\
+\pard\tx220\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\li720\fi-720\pardirnatural
+\ls1\ilvl0
+\b0 \cf0 {\listtext	1.	}Initialize everything: BMS off, charger off (via 5v signal), pilot off, proximity check\
+{\listtext	2.	}If the charging mode is "normal":\
+\pard\tx940\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\li1440\fi-1440\pardirnatural
+\ls1\ilvl1\cf0 {\listtext	a.	}Turn on BMS (always before generating the  pilot signal)\
+{\listtext	b.	}Turn on pilot signal\
+{\listtext	c.	}Only turn on the charger when the proximity is "latched"\
+\pard\tx220\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\li720\fi-720\pardirnatural
+\ls1\ilvl0\cf0 {\listtext	3.	}When charging\
+\pard\tx940\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\li1440\fi-1440\pardirnatural
+\ls1\ilvl1\cf0 {\listtext	a.	}Watch for the proximity signal to change (unlatched or unplugged)\
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+\cf0 \
+\
+\
+ A. If timed charging..\
+ \
+ B. If regular charging..\
+    1. Turn on the BMS by applying power to PIN_BMS_POWER\
+
+\b     2. Turn on the EVSE by ???
+\b0 \
+\
+\
+When unplugged occurs we want to do a soft shutdown of the charger.\
+ 1. Turn off the charger by powering PIN_CHARGER_OFF \
+ 2. Turn off BMS power (which also turns off the charger by opening HLIM)\
+\
+When the timer occurs we want to:\
+  1. Turn off the charger by applying 5v to PIN_CHARGER_OFF\
+
+\b   2. Turn off the EVSE's power, which cuts the AC-DC converter power (so don't do too many things for much longer to avoid draining the car's 12v battery)
+\b0 \
+  3. A short time later (second?) Turn off the BMS by cutting the relay (turning off PIN_BMS_POWER)\
+  4. A short time later, turn off the Arduino via applying > X? volts to PIN_ARDUINO_OFF \
+\
+For relays, information:\
+http://www.instructables.com/id/Connecting-a-12V-Relay-to-Arduino/ (use a 10k resistor)\
+\pard\pardeftab720
+\cf0 http://www.arduino.cc/playground/uploads/Main/relays.pdf   // says a 1k or 2.2k\'85why so low?\
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+\cf0   \
+
+\b Proximity Detection:\
+
+\b0  1. Analog read from PIN_EVSE_PROXIMITY\
+  When using 2.7k resistor:\
+      if : ~4.3v (value=906), not connected  (stop charging)\
+      if: ~2.7v (value=568), connected but not latched (stop charging, if charging)\
+      if: ~1.55v (value=327), connected and latched (okay to charge)\
+  When using a 10k resistor:\
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+\cf0       if : ~4.7v (value=991), not connected  (stop charging)\
+      if: ~2.85v (value=601), connected but not latched (stop charging, if charging)\
+      if: ~1.60v (value=337), connected and latched (okay to charge)\
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+\cf0 \
+\
+HLIM (High Limit for when charging) in Elithion is set to "normally open", and closes when it *can* charge. This is for failsafe, so if the BMS dies the charger will just get a feed of 5v from itself and not charge.\
+\
+\
+
+\b Charger pin reference via Elithion\
+
+\b0 http://lithiumate.elithion.com/pdf/iface_Manzanita%20Micro.pdf\
+http://lithiumate.elithion.com/php/manzanita_micro.php\
+\
+\
+
+\b J1772 reference:\
+
+\b0 http://en.wikipedia.org/wiki/File:J1772_signaling_circuit.gif\
+http://4.bp.blogspot.com/_i_c2BM_uBw4/TR9mOulEE5I/AAAAAAAACDs/8dVMihzK9JA/s1600/J1772-1.jpg\
+http://code.google.com/p/open-evse/wiki/J1772Basics}
