@@ -24,10 +24,12 @@
 
 #include <TimeAlarms.h>
 
-#define DEBUG 1
+#include <stdint.h> // We can compile without this, but it kills xcode completion without it! it took me a while to discover that..
 
 #include "CrbMenu.h"
 
+#define DEBUG 1
+#define DEBUG_ERRORS 1 // Prints errors (you want this on until you are really sure things are right)
 
 #define LCD_COLUMNS 16
 #define LDC_ROWS 2
@@ -48,9 +50,6 @@ CrbMenu g_menu;
         
     -------
  
-    Charging Enabled
-    <blank>
-
     Charging Enabled
     <blank>
  
@@ -92,9 +91,9 @@ typedef uint8_t ChargingMode;
 
 enum _ChargingState {
     ChargingStateOff = 0, // Not doing anything
-    ChargingStateWantToCharge = 1, // The timer fired, or we are set to charge, and we are just waiting for the Proximity signal to be right and the signal to be present
-    ChargingStateCharging = 2, // Charging! We will actively look for the promity state to change, and stop charging when it changes. If it changes, we go to "stops" because we are being unplugged
-    ChargingStateDoneCharging = 3, // Charging is done; we should turn off after a delay
+    ChargingStateCharging = 1, // Charging! We will actively look for the promity state to change, and stop charging when it changes. If it changes, we go to "stops" because we are being unplugged
+    ChargingStateDoneCharging = 2, // Charging is done; we should turn off after a delay
+    ChargingStateManuallyStopped = 3,
 };
 typedef uint8_t ChargingState;
 
@@ -108,7 +107,6 @@ CrbMenuItem *g_rootItem;
 ChargingMode g_chargingMode = ChargingModeNormal;
 time_t g_startTime = 0;
 time_t g_duration = 0;
-ChargingState g_chargingState = ChargingStateOff;
 
 
 #pragma mark -
@@ -120,6 +118,8 @@ ChargingState g_chargingState = ChargingStateOff;
 #define EE_CHARGING_START_TIME 5 // Takes 4 bytes!
 #define EE_UNUSED 9 // free location
 
+#define PIN_BMS_HLIM 2 // high when the BMS HLIM is hit and we should stop charging. Low otherwise
+
 #define PIN_BMS_POWER 4 // Turns on the BMS when HIGH
 #define PIN_EVSE_PILOT 5 // Turns on the pilot signal when HIGH
 #define PIN_CHARGER_OFF 6  // Turns off the charger when HIGH (by sending 5v to the manzanita micro's pin 2). A safety feature is the 5v signal from pin 1 of the charger is looped to the "normally closed" relay controlled by the BMS "high limit". The BMS opens the circuit to let the charger charge.
@@ -127,6 +127,9 @@ ChargingState g_chargingState = ChargingStateOff;
 #define PIN_EVSE_PROXIMITY A0
 
 // aliases to make the code more readable when setting values for the pins
+#define BMS_HLIM_REACHED LOW // When the 5v is pulled down to 0 by the BMS, we have reached the "high limit"
+#define BMS_HLIM_NOT_REACHED HIGH // Normally 5v
+
 #define BMS_MODE_TURNED_ON HIGH
 #define BMS_MODE_TURNED_OFF LOW
 
@@ -139,6 +142,11 @@ ChargingState g_chargingState = ChargingStateOff;
 #define ARDUINO_MODE_ALLOW_ON LOW
 #define CHARGER_MODE_TURN_OFF HIGH
 
+static inline void updateRootMenuItemTitle(const char *title, const char *subtitle) {
+    g_rootItem->setName(title);
+    g_rootItem->setSecondLineMessage(subtitle);
+    g_menu.printItem(g_rootItem);
+}
 
 enum ProximityMode {
     ProximityModeUnknown = 0, // don't charge; something's wrong
@@ -162,9 +170,16 @@ enum ProximityMode {
  */
 
 static ProximityMode readProximityMode() {
-    int proximityValue = digitalRead(PIN_EVSE_PROXIMITY);
+    int proximityValue = analogRead(PIN_EVSE_PROXIMITY);
+    
+#if DEBUG
+//    Serial.print("Proximity read value: ");
+//    Serial.println(proximityValue);
+#endif
+    
     if (proximityValue > 900) {
         return ProximityModeUnplugged;
+        
     }
     if (proximityValue > 500) {
         return ProximityModePluggedButNotLatched;
@@ -181,6 +196,7 @@ static ProximityMode readProximityMode() {
 static inline void setInitialPinStates() {
     // Setup our initial state
     // Pins default as INPUT, but we want to make them output
+//    pinMode(PIN_BMS_HLIM, INPUT); // default value
     
     pinMode(PIN_BMS_POWER, OUTPUT);  
     digitalWrite(PIN_BMS_POWER, BMS_MODE_TURNED_OFF);
@@ -197,14 +213,26 @@ static inline void setInitialPinStates() {
 //    pinMode(PIN_EVSE_PROXIMITY, INPUT); // The default value is input, don't bother setting it
 }
 
+static bool isBMSHighLimitHit() {
+#if DEBUG
+    Serial.print("BMS high limit read value: ");
+    Serial.println(digitalRead(PIN_BMS_HLIM));
+#endif
+    return digitalRead(PIN_BMS_HLIM) == BMS_HLIM_REACHED;
+}
+
+void setStandardStatusMessage();
+
 void ChargingModeChangedAction(CrbActionMenuItem *sender) {
     // TODO: move this into the menu class, if it makes more sense there and i need it again
     if (!sender->hasOption(CrbMenuItemOptionSelected)) {
         // Update the global and write it out
         g_chargingMode = sender->getTag();
         EEPROM.write(EE_CHARGING_MODE_LOCATION, g_chargingMode);
-        
         sender->addOption(CrbMenuItemOptionSelected);
+
+        // If we are charging, then stop charging
+        
         // remove the option from the other menu items
         CrbMenuItem *parent = sender->getParent();
         CrbMenuItem *walker = parent->getChild();
@@ -214,6 +242,7 @@ void ChargingModeChangedAction(CrbActionMenuItem *sender) {
             }
             walker = walker->getNext();
         }
+        setStandardStatusMessage();
         g_menu.print(); // Update to show the change
     }
 }
@@ -253,24 +282,22 @@ static inline void loadSettings() {
     // Validate values
     if (g_chargingMode > ChargingModeTimed) {
         g_chargingMode = ChargingModeNormal;
+        
     }
     
     g_startTime = defaultsReadTime(EE_CHARGING_START_TIME);
     g_duration = defaultsReadTime(EE_CHARGING_DURATION_LOCATION);
 }
 
-
-static void ChargingModeEnter(CrbActionMenuItem *) {
-    int value = digitalRead(PIN_BMS_POWER) == HIGH ? LOW : HIGH;
-    digitalWrite(PIN_BMS_POWER, value);
-}
+static void ChargingModeEnter(CrbActionMenuItem *);
 
 
 static inline void setupMenu() {
     g_lcd.begin(LCD_COLUMNS, LDC_ROWS);
     g_lcd.clear();
     
-    g_rootItem = new CrbActionMenuItem("Charging Enabled", (CrbMenuItemAction)ChargingModeEnter, 0l);
+    g_rootItem = new CrbActionMenuItem(NULL, (CrbMenuItemAction)ChargingModeEnter, 0l);
+    
     CrbMenuItem *chargingModeItem = new CrbMenuItem("Charging Mode >");
     CrbMenuItem *itemNormalChargingMode = new CrbActionMenuItem("Normal charging", (CrbMenuItemAction) ChargingModeChangedAction, ChargingModeNormal);
     CrbMenuItem *itemTimedChargingMode = new CrbActionMenuItem("Timed charging", (CrbMenuItemAction)ChargingModeChangedAction, ChargingModeTimed);
@@ -298,7 +325,9 @@ static inline void setupMenu() {
     CrbMenuItem *itemTimerDuration = new CrbMenuItem("Set timer duration >");
     itemSettings->addChild(itemTimerDuration);
     itemTimerDuration->addChild(new CrbDurationMenuItem("Duration", (CrbMenuItemAction)ChargingSaveDurationAction, g_duration));
-    
+
+    CrbMenuItem *clockMenuItem = new CrbClockMenuItem("Clock");
+    g_rootItem->addChild(clockMenuItem);
     
     // TODO: how to initialize these variables...so it is showing the current time/date when the menu is shown?
 //    CrbMenuItem *itemSetDate = new CrbMenuItem("Set current date >");
@@ -309,7 +338,7 @@ static inline void setupMenu() {
 //    itemSettings->addChild(itemSetTime);
 //    itemSetDate->addChild(new CrbTimeSetMenuItem("Set the time", (CrbMenuItemAction)ChargingSaveDateAction, 0));
     
-    
+
     
     g_menu.init(&g_lcd, g_rootItem);
     g_menu.print();
@@ -328,8 +357,9 @@ static inline void setupTime() {
 
 // Turns on or off the BMS. mode==HIGH to on and mode==LOW to off
 static inline void setBMSToMode(uint8_t mode) {
+
 #if DEBUG
-    Serial.print("Turning BMS");
+    Serial.print("Turning BMS ");
     if (mode == BMS_MODE_TURNED_ON) {
         Serial.println("on");
     } else {
@@ -342,8 +372,10 @@ static inline void setBMSToMode(uint8_t mode) {
 #endif
     if (digitalRead(PIN_BMS_POWER) != mode) {
         digitalWrite(PIN_BMS_POWER, mode);
-        // Give it a brief moment to kick on.
-        Alarm.delay(200); // TODO make sure 200ms is enough time to let it start
+        // Give it a brief moment to kick on; don't worry if we are turning it off
+        if (mode == BMS_MODE_TURNED_ON) {
+            Alarm.delay(200); // TODO make sure 200ms is enough time to let it start
+        }
     }
 }
 
@@ -361,8 +393,47 @@ static void enableTimer(bool enabled) {
 #warning implement
 }
 
-//enableTimer(false);
-//enableCharging(true);
+ChargingState getChargingState();
+
+static inline time_t getChargingEndTime() {
+    // add the duration to the start to get an effective end time
+    tmElements_t durationElements;
+    breakTime(g_duration, durationElements);
+    tmElements_t resultElements;
+    breakTime(g_startTime, resultElements);
+    resultElements.Hour += durationElements.Hour;
+    resultElements.Minute += durationElements.Minute;
+    return makeTime(resultElements);
+}
+
+static const char *amOrPmStringForTime(time_t t) {
+    return isAM(t) ? "AM" : "PM";
+}
+
+// buffer for formatting times
+char g_timeBuffer[16]; // 00:00AM-00:00AM
+
+void setStandardStatusMessage() {
+    if (getChargingState() == ChargingStateDoneCharging) {
+        g_rootItem->setName("Done charging...");
+        g_rootItem->setSecondLineMessage("[Enter to start again]");
+    } else if (getChargingState() == ChargingStateManuallyStopped) {
+        g_rootItem->setName("Manually stopped...");
+        g_rootItem->setSecondLineMessage("[Enter to start again]");
+    } else if (g_chargingMode == ChargingModeNormal) {
+        g_rootItem->setName("Waiting for the plug...");
+        g_rootItem->setSecondLineMessage("[-> Settings]");
+    } else if (g_chargingMode == ChargingModeTimed) {
+        g_rootItem->setName("Waiting for the timer at:");
+        time_t endTime = getChargingEndTime();
+        sprintf(g_timeBuffer, "%02u:%02u%s-%02u:%02u%s", hourFormat12(g_startTime), minute(g_startTime), amOrPmStringForTime(g_startTime), hourFormat12(endTime), minute(endTime), amOrPmStringForTime(endTime));
+        g_rootItem->setSecondLineMessage(g_timeBuffer);
+    } else {
+        g_rootItem->setName("ERROR");
+        g_rootItem->setSecondLineMessage("Unknown charging mode.");
+    }
+    g_menu.printItem(g_rootItem);    
+}
 
 void setup() {
 #if DEBUG
@@ -375,42 +446,69 @@ void setup() {
     setupMenu();
     setupTime();
 
-    // Kick us into the initial state of wanting to charge, and loop waiting for the promity signal to be right. 
-    if (g_chargingMode == ChargingModeNormal) {
-        g_chargingState = ChargingStateWantToCharge;
-    }
+    // Set the intitial state for the menu item
+    setStandardStatusMessage();
 }
 
 static bool canCharge() {
-    // Ideally we should look for the 12v pilot signal. I don't have anything that reads the signal. It would be interesting to see if the current passing through the signal is less than 40mA. If it is, the arduino pin can be set as an OUTPUT and sink the current (I think this means take it to ground). notes http://arduino.cc/en/Tutorial/DigitalPins
-    // Instead, see if we can charge by looking for the proximity signal to be correct. 
-    ProximityMode proximityMode = readProximityMode();
-    return proximityMode == ProximityModePluggedAndLatched;
+    // First, see if we are within the time period we can charge (if timed charging)
+    bool result = false;
+    if (g_chargingMode == ChargingModeTimed) {
+        // TODO: check the time and see if we are within the time period for charging
+    } else {
+        // Normal charging
+        result = true;
+    }
+    
+    if (result) {
+        // Ideally we should look for the 12v pilot signal. I don't have anything that reads the signal. It would be interesting to see if the current passing through the signal is less than 40mA. If it is, the arduino pin can be set as an OUTPUT and sink the current (I think this means take it to ground). notes http://arduino.cc/en/Tutorial/DigitalPins
+        // Instead, see if we can charge by looking for the proximity signal to be correct. 
+        ProximityMode proximityMode = readProximityMode();
+        result = proximityMode == ProximityModePluggedAndLatched;
+    }
+    return result;
 }
 
-static void startCharging() {
-    // Move our state to charging; from now on in the loop we will look for the proximity switch to be turned off to "soft stop" charging
-    g_chargingState = ChargingStateCharging;
-
+static void turnOnBMSAndStartCharging() {
+#if DEBUG
+    Serial.println("+++++++++++++++++ Turning on the BMS");
+#endif
     // Make sure the BMS is on before we turn on the charger
     setBMSToMode(BMS_MODE_TURNED_ON);
+#if DEBUG
+    Serial.println("Sending the EVSE the signal");
+#endif
     // Then tell the EVSE to give us power
     setPilotSignalToMode(PILOT_SIGNAL_MODE_ON);
+#if DEBUG
+    Serial.println("Turning the charger on (disabling 5v that we send to it)");
+#endif
     // At this point, the EVSE will open its relay and give the charger power
     // Stop signaling the charger to not charge (turn off the signal we send it). This is doubly controlled by the relay hooked up to the BMS.
     setChargerToMode(CHARGER_MODE_ON);
-
-    // We will then be charging!
+    updateRootMenuItemTitle("Charging...", "[Enter to stop]");
 }
 
-static bool timedChargingShouldBeEnabled() {
-    // TODO: this
-    return false; // This should see if the current time falls within the normal charge time, and if so, allow charging
-#warning finish
+static bool doneCharging() {
+    if (isBMSHighLimitHit()) {
+        // We hit the high limit...
+        updateRootMenuItemTitle("Done Charging", "BMS high limit hit");
+        
+#if DEBUG
+        Serial.println("---------- Done charging!");
+#endif
+        // TODO: start at timer to turn everything off after the balance period..
+        // Now balance for X minutes
+        
+        return true;
+    }
+    return false;
 }
 
-static void stopCharging() {
-
+static void stopChargingAndTurnOffBMS() {
+#if DEBUG
+    Serial.println("---------- stopping charging");
+#endif
     // Stop charging, because we are going to be unplugged
     // We "soft stop" the charger by sending it 5v; this kills it right away, and makes it stop drawing amps
     setChargerToMode(CHARGER_MODE_OFF);
@@ -419,25 +517,34 @@ static void stopCharging() {
     // Turn off the pilot signal; this cuts the power to the charger
     setPilotSignalToMode(PILOT_SIGNAL_MODE_OFF);
     Alarm.delay(500); // TODO make sure 500ms (half a second) is long enough to wait before we turn off the BMS
-    // Turn off the BMS
-    setBMSToMode(BMS_MODE_TURNED_ON);
     
-    // Go back to "wantToCharge"
-    if (g_chargingMode == ChargingModeNormal) {
-        g_chargingState = ChargingStateWantToCharge;
-    } else if (g_chargingMode == ChargingModeTimed) {
-        if (timedChargingShouldBeEnabled()) {
-            g_chargingState = ChargingStateWantToCharge;
-        } else {
-            // go to off, and wait for the timer to be fired
-            // TODO: check to see if we are past the timer...if we are, set a delay to turn off the arduino
-            g_chargingState = ChargingStateOff;
-        }
-    } else {
-        g_chargingState = ChargingStateOff;
+    // Turn off the BMS
+    setBMSToMode(BMS_MODE_TURNED_OFF);
+    setStandardStatusMessage();
+}
+
+// NOTE: be careful on what we write to the state, as going from certain states to others might leave the charger charging!
+static ChargingState g_chargingState = ChargingStateOff;
+
+ChargingState getChargingState() {
+    return g_chargingState;
+}
+
+static void ChargingModeEnter(CrbActionMenuItem *) {
+    // Manually turn charging off if we are charging 
+    if (g_chargingState == ChargingStateCharging){
 #if DEBUG
-        Serial.println("stopCharging: Unhandled charging mode!");
+        Serial.println("Setting charging state to ChargingStateManuallyStopped");
 #endif
+        g_chargingState = ChargingStateManuallyStopped;
+        stopChargingAndTurnOffBMS();
+    } else if (g_chargingState == ChargingStateManuallyStopped || g_chargingState == ChargingStateDoneCharging)  {
+        // Go back to off, and re-enable the timer (or start charging again)
+#if DEBUG
+        Serial.println("Setting charging state to off so we can charge again (if the timer is enabled)");
+#endif
+        g_chargingState = ChargingStateOff;
+        setStandardStatusMessage();
     }
 }
 
@@ -446,18 +553,25 @@ void loop() {
     
     switch (g_chargingState) {
         case ChargingStateOff:
-            // TODO: when in debug mode, validate things are off?
-            break;
-        // If we are "wanting to charge" because the timer fired, we loop until we can charge, and then actually start
-        case ChargingStateWantToCharge:
+            // Check to see if we can move to the next charging state
             if (canCharge()) {
-                startCharging();
+                // We can charge, do it
+                g_chargingState = ChargingStateCharging;
+                turnOnBMSAndStartCharging();
             }
             break;
         case ChargingStateCharging:
+            // Check to see if we need to stop charging, because the timer stopped, or the proximity switch was flipped
             if (!canCharge()) {
-                stopCharging();
+                g_chargingState = ChargingStateOff;
+                stopChargingAndTurnOffBMS();
+            } else if (doneCharging()) {
+                g_chargingState = ChargingStateDoneCharging;
+                stopChargingAndTurnOffBMS();
             }
+            break;
+        case ChargingStateManuallyStopped:
+            // Don't do anything
             break;
         case ChargingStateDoneCharging:
             // We don't do anyting; we are going to turn the arduino off after a delay

@@ -15,7 +15,7 @@
 
 #include "Adafruit_RGBLCDShield.h"
 
-#define DEBUG_MENU 1 // Set to 1 to debug the setup and stuff
+#define DEBUG_MENU 0 // Set to 1 to debug the setup and stuff
 
 class CrbMenuItem;
 
@@ -40,6 +40,7 @@ public:
     void loopOnce(); // loops and checks for the buttons on the lcd to navigate the menu
 
     void print(); // Writes to the lcd
+    void printItem(CrbMenuItem *item); // Writes the message for this item, if it is the current item
 
     // Each menu item may call into this class to do the actual work of navigating the menu structure
     void gotoPriorSibling(); // Go "up" 
@@ -54,6 +55,7 @@ public:
 class CrbMenuItem {
 private:
 	const char *_name;
+    const char *_secondLineMessage;
     
     CrbMenuItem *_parent; // The item we go "back" to
     CrbMenuItem *_priorSibling; // The previous sibling
@@ -71,10 +73,15 @@ protected:
 
     virtual void printLine1(Adafruit_RGBLCDShield *lcd);
     virtual void printLine2(Adafruit_RGBLCDShield *lcd);
+    
+    // Called each loop() when active
+    virtual void tick(CrbMenu *sender) { }
 
     friend class CrbMenu; // so it can access the above protected methods
 public:
     CrbMenuItem(const char *name);
+    
+    inline void setSecondLineMessage(const char *msg) { _secondLineMessage = msg; }
     
 	inline CrbMenuItem *getParent() const { return _parent; }
 	inline CrbMenuItem *getPrior() const { return _priorSibling; }
@@ -86,6 +93,7 @@ public:
 #if DEBUG_MENU
 	inline const char *getName() const { return _name; }
 #endif
+    inline void setName(const char *name) { _name = name; }
     inline void addOption(CrbMenuItemOption option) { _options = _options | option; }
     inline void removeOption(CrbMenuItemOption option) { _options = _options & ~option; }
     inline bool hasOption(CrbMenuItemOption option) { return (option & _options) != 0; }
@@ -138,6 +146,12 @@ public:
     CrbDurationMenuItem(const char *name, CrbMenuItemAction action, time_t time);
 };
 
+class CrbClockMenuItem : public CrbMenuItem {
+protected:    
+    void tick(CrbMenu *sender);
+public:
+    CrbClockMenuItem(const char *name);
+};
 
 
 #endif

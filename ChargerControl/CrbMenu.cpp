@@ -11,6 +11,7 @@
 CrbMenuItem::CrbMenuItem(const char *name) : _name(name) {
     _parent = _priorSibling = _nextSibling = _child = 0;
     _options = 0;
+    _secondLineMessage = NULL;
 }
 
 //CrbMenuItem *CrbMenuItem::addNextWithName(const char *name) {
@@ -73,13 +74,18 @@ void CrbMenuItem::printLine1(Adafruit_RGBLCDShield *lcd) {
     if (this->hasOption(CrbMenuItemOptionSelected)) {
         lcd->print("*");
     }
-    lcd->print(_name);
+    if (_name) lcd->print(_name);
 
 }
 
 void CrbMenuItem::printLine2(Adafruit_RGBLCDShield *lcd) {
     lcd->setCursor(0,1);
-    if (this->getPrior() && this->getNext()) {
+    // Prefer whatever message we have stored
+    if (_secondLineMessage) {
+        lcd->print(_secondLineMessage);
+    }
+    // Otherwise, say our navigation status (if we are in the menu system)
+    else if (this->getPrior() && this->getNext()) {
         if (this->getChild()) {
             lcd->print("       [Up/Down]");
         } else {
@@ -295,8 +301,6 @@ void CrbTimeSetMenuItem::handleEnterButton(CrbMenu *sender) {
     this->updateCursorForLine2(sender->getLCD());
 }
 
-
-
 #pragma mark - CrbDurationMenuItem
 
 
@@ -335,6 +339,13 @@ void CrbMenu::print() {
 #endif
     }
 }
+
+void CrbMenu::printItem(CrbMenuItem *item) {
+    if (_currentItem == item) {
+        this->print();
+    }
+}
+
 
 void CrbMenu::init(Adafruit_RGBLCDShield *lcd, CrbMenuItem *rootItem) {
     _lcd = lcd;
@@ -406,6 +417,18 @@ void CrbMenu::loopOnce() {
         // Wait until the button is up
         while (_lcd->readButtons()) {
             // nop
+            // should we process timers here? Alarm.delay(0)?
         }
     }
+    _currentItem->tick(this);
+}
+
+CrbClockMenuItem::CrbClockMenuItem(const char *name) : CrbMenuItem(name) {
+    
+}
+
+// Create a timer every second that updates the clock but only when we are active
+void CrbClockMenuItem::tick(CrbMenu *sender) { 
+    
+
 }
