@@ -22,7 +22,7 @@
 
 #include <Time.h>  
 
-#include <TimeAlarms.h>
+#include <TimeAlarms.h> // NOTE: not using; I could remove this 
 
 #include <stdint.h> // We can compile without this, but it kills xcode completion without it! it took me a while to discover that..
 
@@ -93,7 +93,8 @@ enum _ChargingState {
     ChargingStateOff = 0, // Not doing anything
     ChargingStateCharging = 1, // Charging! We will actively look for the promity state to change, and stop charging when it changes. If it changes, we go to "stops" because we are being unplugged
     ChargingStateDoneCharging = 2, // Charging is done; we should turn off after a delay
-    ChargingStateManuallyStopped = 3,
+    ChargingStateBalancingCells = 3, // After charging is done, we will balance the cells for g_balanceDuration
+    ChargingStateManuallyStopped = 4,
 };
 typedef uint8_t ChargingState;
 
@@ -105,8 +106,12 @@ CrbMenuItem *g_rootItem;
 
 // Charging mode and state
 ChargingMode g_chargingMode = ChargingModeNormal;
-time_t g_startTime = 0;
-time_t g_duration = 0;
+time_t g_startTime = 0; // we only read the hour/minute
+time_t g_duration = 0; // we only read the hour/minute
+time_t g_endTime = 0;
+uint8_t g_balanceDuration = 1; // In minutes; currently, not customizable via UI
+time_t g_balancingEndTime = 0;
+// TODO: UI to customize the balance time. Validated from 0 - 255 minutes
 
 
 #pragma mark -
@@ -116,7 +121,8 @@ time_t g_duration = 0;
 #define EE_CHARGING_MODE_LOCATION 0
 #define EE_CHARGING_DURATION_LOCATION 1 // Takes 4 bytes!
 #define EE_CHARGING_START_TIME 5 // Takes 4 bytes!
-#define EE_UNUSED 9 // free location
+#define EE_BALANCE_TIME 9 // 1 byte
+#define EE_UNUSED 10 // free location
 
 #define PIN_BMS_HLIM 2 // high when the BMS HLIM is hit and we should stop charging. Low otherwise
 
@@ -140,7 +146,7 @@ time_t g_duration = 0;
 #define CHARGER_MODE_OFF HIGH
 
 #define ARDUINO_MODE_ALLOW_ON LOW
-#define CHARGER_MODE_TURN_OFF HIGH
+#define ARDUINO_MODE_TURN_OFF HIGH
 
 static inline void updateRootMenuItemTitle(const char *title, const char *subtitle) {
     g_rootItem->setName(title);
@@ -191,8 +197,6 @@ static ProximityMode readProximityMode() {
 }
 
 
-// TODO: use a pin wired to the HLIM of the BMS to find out when the BMS has reached the "High limit" so the Arduino can auto-turn off the EVSE (and itself) after a set time for the cells to balance.
-
 static inline void setInitialPinStates() {
     // Setup our initial state
     // Pins default as INPUT, but we want to make them output
@@ -215,8 +219,8 @@ static inline void setInitialPinStates() {
 
 static bool isBMSHighLimitHit() {
 #if DEBUG
-    Serial.print("BMS high limit read value: ");
-    Serial.println(digitalRead(PIN_BMS_HLIM));
+//    Serial.print("BMS high limit read value: ");
+//    Serial.println(digitalRead(PIN_BMS_HLIM));
 #endif
     return digitalRead(PIN_BMS_HLIM) == BMS_HLIM_REACHED;
 }
@@ -256,9 +260,39 @@ static inline time_t defaultsReadTime(int location) {
     return eeprom_read_dword((uint32_t *)location);
 }
 
+static void convertStartTimeToToday() {
+    // Convert the start time to a time based on today
+    tmElements_t nowElements;
+    breakTime(now(), nowElements);
+    tmElements_t startTimeElements;
+    breakTime(g_startTime, startTimeElements);
+    // Take the elements from now, and use the hour and minute from when to start (with a 0 second)
+    nowElements.Hour = startTimeElements.Hour;
+    nowElements.Minute = startTimeElements.Minute;
+    nowElements.Second = 0;
+    g_startTime = makeTime(nowElements);    
+}
+
+// must be called after convertStartTimeToToday()
+static void convertEndTimeToToday() {
+    // add the duration to the start to get an effective end time
+    tmElements_t durationElements;
+    breakTime(g_duration, durationElements);
+    tmElements_t resultElements;
+    breakTime(g_startTime, resultElements);
+    resultElements.Hour += durationElements.Hour;
+    resultElements.Minute += durationElements.Minute;
+    g_endTime = makeTime(resultElements);
+}
+
+static inline time_t getChargingEndTime() {
+    return g_endTime;
+}
+
 static void ChargingSaveStartTimeAction(CrbTimeSetMenuItem *sender) {
     if (g_startTime != sender->getTime()) {
         g_startTime = sender->getTime();
+        convertStartTimeToToday();
         defaultsWriteTime(EE_CHARGING_START_TIME, g_startTime);
     }
 }
@@ -266,6 +300,7 @@ static void ChargingSaveStartTimeAction(CrbTimeSetMenuItem *sender) {
 static void ChargingSaveDurationAction(CrbTimeSetMenuItem *sender) {
     if (g_duration != sender->getTime()) {
         g_duration = sender->getTime();
+        convertEndTimeToToday();
         defaultsWriteTime(EE_CHARGING_DURATION_LOCATION, g_duration);
     }
 }
@@ -275,18 +310,36 @@ static void ChargingSaveDurationAction(CrbTimeSetMenuItem *sender) {
 //    
 //}
 
+static void setCurrentTimeAction(CrbTimeSetMenuItem *sender) {
+    // use juse the hour/minute from the sender
+    tmElements_t newTimeElements;
+    breakTime(sender->getTime(), newTimeElements);
+    tmElements_t nowTimeElements;
+    breakTime(now(), nowTimeElements);
+    nowTimeElements.Hour = newTimeElements.Hour;
+    nowTimeElements.Minute = newTimeElements.Minute;
+    time_t newTime = makeTime(nowTimeElements);
+    setTime(newTime); // Updates the RTC
+}
+
 static inline void loadSettings() {
+    // TODO: the first time we ever power on, it would be nice to clear out the EEPROM to all 0, so we know what the defaults are for everything
+    
     // Restore the previous values
     g_chargingMode = EEPROM.read(EE_CHARGING_MODE_LOCATION);
     
     // Validate values
     if (g_chargingMode > ChargingModeTimed) {
         g_chargingMode = ChargingModeNormal;
-        
     }
     
     g_startTime = defaultsReadTime(EE_CHARGING_START_TIME);
     g_duration = defaultsReadTime(EE_CHARGING_DURATION_LOCATION);
+//    g_balanceDuration = EEPROM.read(EE_BALANCE_TIME); // Can we validate this duration?
+    
+    convertStartTimeToToday();
+    // Only call after convertStartTimeToToday
+    convertEndTimeToToday();
 }
 
 static void ChargingModeEnter(CrbActionMenuItem *);
@@ -325,20 +378,20 @@ static inline void setupMenu() {
     CrbMenuItem *itemTimerDuration = new CrbMenuItem("Set timer duration >");
     itemSettings->addChild(itemTimerDuration);
     itemTimerDuration->addChild(new CrbDurationMenuItem("Duration", (CrbMenuItemAction)ChargingSaveDurationAction, g_duration));
-
-    CrbMenuItem *clockMenuItem = new CrbClockMenuItem("Clock");
-    g_rootItem->addChild(clockMenuItem);
     
     // TODO: how to initialize these variables...so it is showing the current time/date when the menu is shown?
 //    CrbMenuItem *itemSetDate = new CrbMenuItem("Set current date >");
 //    itemSettings->addChild(itemSetDate);
 //    itemSetDate->addChild(new CrbTimeSetMenuItem("Set the date", (CrbMenuItemAction)ChargingSaveDateAction, 0));
 //
-//    CrbMenuItem *itemSetTime = new CrbMenuItem("Set current time >");
-//    itemSettings->addChild(itemSetTime);
-//    itemSetDate->addChild(new CrbTimeSetMenuItem("Set the time", (CrbMenuItemAction)ChargingSaveDateAction, 0));
-    
+    CrbMenuItem *itemSetTime = new CrbClockMenuItem("Set current time >"); // shows the current time when visible..
+    itemSettings->addChild(itemSetTime);
+    CrbTimeSetMenuItem *timeSetItem = new CrbTimeSetMenuItem("Set the time", (CrbMenuItemAction)setCurrentTimeAction, now());
+    timeSetItem->setShouldUpdateTimeWhenShown(true);
+    itemSetTime->addChild(timeSetItem);
 
+    CrbMenuItem *clockMenuItem = new CrbClockMenuItem("Clock");
+    g_rootItem->addChild(clockMenuItem);
     
     g_menu.init(&g_lcd, g_rootItem);
     g_menu.print();
@@ -347,10 +400,10 @@ static inline void setupMenu() {
 static inline void setupTime() { 
     setSyncProvider(RTC.get);   // the function to get the time from the RTC
 #if DEBUG
-    if (timeStatus() != timeSet) 
-        Serial.println("Unable to sync with the RTC");
-    else
-        Serial.println("RTC has set the system time");      
+//    if (timeStatus() != timeSet) 
+//        Serial.println("Unable to sync with the RTC");
+//    else
+//        Serial.println("RTC has set the system time");      
 #endif
 }
 
@@ -359,16 +412,16 @@ static inline void setupTime() {
 static inline void setBMSToMode(uint8_t mode) {
 
 #if DEBUG
-    Serial.print("Turning BMS ");
-    if (mode == BMS_MODE_TURNED_ON) {
-        Serial.println("on");
-    } else {
-        Serial.println("off");
-        // If turning off, make sure the charger is already off first!
-        if (digitalRead(PIN_CHARGER_OFF) != HIGH) {
-            Serial.println("WARNING: THE CHARGER SHOULD HAVE BEEN SIGNALED OFF BEFORE THE BMS IS TURNED OFF!");
-        }
-    }
+//    Serial.print("Turning BMS ");
+//    if (mode == BMS_MODE_TURNED_ON) {
+//        Serial.println("on");
+//    } else {
+//        Serial.println("off");
+//        // If turning off, make sure the charger is already off first!
+//        if (digitalRead(PIN_CHARGER_OFF) != HIGH) {
+//            Serial.println("WARNING: THE CHARGER SHOULD HAVE BEEN SIGNALED OFF BEFORE THE BMS IS TURNED OFF!");
+//        }
+//    }
 #endif
     if (digitalRead(PIN_BMS_POWER) != mode) {
         digitalWrite(PIN_BMS_POWER, mode);
@@ -395,37 +448,59 @@ static void enableTimer(bool enabled) {
 
 ChargingState getChargingState();
 
-static inline time_t getChargingEndTime() {
-    // add the duration to the start to get an effective end time
-    tmElements_t durationElements;
-    breakTime(g_duration, durationElements);
-    tmElements_t resultElements;
-    breakTime(g_startTime, resultElements);
-    resultElements.Hour += durationElements.Hour;
-    resultElements.Minute += durationElements.Minute;
-    return makeTime(resultElements);
-}
-
 static const char *amOrPmStringForTime(time_t t) {
     return isAM(t) ? "AM" : "PM";
 }
 
-// buffer for formatting times
-char g_timeBuffer[16]; // 00:00AM-00:00AM
+// buffer for formatting times. 16 columns + NULL. DON'T overrun it
+char g_timeBuffer[17]; // 00:00AM-00:00AM
+
+void updateBalancingCellsStatus() {
+    // The second line will say how long we have till the balance is done
+    // Make sure you don't overrun this buffer!
+    // calc the diffence from now
+    time_t timeLeft = g_balancingEndTime - now();
+    if (timeLeft < 0) timeLeft = 0; // shouldn't happen...
+    // assign to ints so we get the type right when formatting
+    int hrs = numberOfHours(timeLeft);
+    int mins = numberOfMinutes(timeLeft);
+    int secs = numberOfSeconds(timeLeft);
+    sprintf(g_timeBuffer, " %02u:%02u:%02u", hrs, mins, secs);
+    g_rootItem->setSecondLineMessage(g_timeBuffer);
+    // Update the LCD without clearing! (otherwise it flickers)
+    g_menu.printItemLine2(g_rootItem);
+    
+#if DEBUG
+//    Serial.print("Balance time left:");
+//    Serial.print(numberOfHours(timeLeft));
+//    Serial.print(" hrs ");
+//    Serial.print(numberOfMinutes(timeLeft));
+//    Serial.print(" mins ");
+//    Serial.print(numberOfSeconds(timeLeft));
+//    Serial.println(" secs ");
+    
+#endif
+    
+}
 
 void setStandardStatusMessage() {
-    if (getChargingState() == ChargingStateDoneCharging) {
+    ChargingState currentChargingState = getChargingState();
+    if (currentChargingState == ChargingStateDoneCharging) {
         g_rootItem->setName("Done charging...");
-        g_rootItem->setSecondLineMessage("[Enter to start again]");
-    } else if (getChargingState() == ChargingStateManuallyStopped) {
+        g_rootItem->setSecondLineMessage(NULL);
+    } else if (currentChargingState == ChargingStateManuallyStopped) {
         g_rootItem->setName("Manually stopped...");
         g_rootItem->setSecondLineMessage("[Enter to start again]");
+    } else if (currentChargingState == ChargingStateBalancingCells) { 
+        g_rootItem->setName("Balancing cells...");
+        updateBalancingCellsStatus();
     } else if (g_chargingMode == ChargingModeNormal) {
         g_rootItem->setName("Waiting for the plug...");
-        g_rootItem->setSecondLineMessage("[-> Settings]");
+        g_rootItem->setSecondLineMessage(" -> Settings");
     } else if (g_chargingMode == ChargingModeTimed) {
         g_rootItem->setName("Waiting for the timer at:");
         time_t endTime = getChargingEndTime();
+        // Make sure you don't overrun this buffer!
         sprintf(g_timeBuffer, "%02u:%02u%s-%02u:%02u%s", hourFormat12(g_startTime), minute(g_startTime), amOrPmStringForTime(g_startTime), hourFormat12(endTime), minute(endTime), amOrPmStringForTime(endTime));
         g_rootItem->setSecondLineMessage(g_timeBuffer);
     } else {
@@ -436,8 +511,8 @@ void setStandardStatusMessage() {
 }
 
 void setup() {
-#if DEBUG
     Serial.begin(9600);
+#if DEBUG
     Serial.println("setup"); 
 #endif
     // Order is pretty important!
@@ -454,7 +529,11 @@ static bool canCharge() {
     // First, see if we are within the time period we can charge (if timed charging)
     bool result = false;
     if (g_chargingMode == ChargingModeTimed) {
-        // TODO: check the time and see if we are within the time period for charging
+        // We can charge when doing timed charging if we are within the right time period
+        time_t currentTime = now();
+        if (currentTime >= g_startTime && currentTime <= g_endTime) {
+            result = true;
+        }
     } else {
         // Normal charging
         result = true;
@@ -470,45 +549,27 @@ static bool canCharge() {
 }
 
 static void turnOnBMSAndStartCharging() {
-#if DEBUG
-    Serial.println("+++++++++++++++++ Turning on the BMS");
-#endif
     // Make sure the BMS is on before we turn on the charger
     setBMSToMode(BMS_MODE_TURNED_ON);
-#if DEBUG
-    Serial.println("Sending the EVSE the signal");
-#endif
     // Then tell the EVSE to give us power
     setPilotSignalToMode(PILOT_SIGNAL_MODE_ON);
-#if DEBUG
-    Serial.println("Turning the charger on (disabling 5v that we send to it)");
-#endif
     // At this point, the EVSE will open its relay and give the charger power
     // Stop signaling the charger to not charge (turn off the signal we send it). This is doubly controlled by the relay hooked up to the BMS.
     setChargerToMode(CHARGER_MODE_ON);
     updateRootMenuItemTitle("Charging...", "[Enter to stop]");
 }
 
-static bool doneCharging() {
-    if (isBMSHighLimitHit()) {
-        // We hit the high limit...
-        updateRootMenuItemTitle("Done Charging", "BMS high limit hit");
-        
-#if DEBUG
-        Serial.println("---------- Done charging!");
-#endif
-        // TODO: start at timer to turn everything off after the balance period..
-        // Now balance for X minutes
-        
-        return true;
-    }
-    return false;
+static inline void startBalancingCells() {
+    // Calculate the time when we will be done balancing
+    g_balancingEndTime = now() + g_balanceDuration*60; // time is in minutes, convert to seconds
+    setStandardStatusMessage();
+}
+
+static inline bool doneBalancingCells() {
+    return now() >= g_balancingEndTime;
 }
 
 static void stopChargingAndTurnOffBMS() {
-#if DEBUG
-    Serial.println("---------- stopping charging");
-#endif
     // Stop charging, because we are going to be unplugged
     // We "soft stop" the charger by sending it 5v; this kills it right away, and makes it stop drawing amps
     setChargerToMode(CHARGER_MODE_OFF);
@@ -532,17 +593,11 @@ ChargingState getChargingState() {
 
 static void ChargingModeEnter(CrbActionMenuItem *) {
     // Manually turn charging off if we are charging 
-    if (g_chargingState == ChargingStateCharging){
-#if DEBUG
-        Serial.println("Setting charging state to ChargingStateManuallyStopped");
-#endif
+    if (g_chargingState == ChargingStateCharging || g_chargingState == ChargingStateBalancingCells){
         g_chargingState = ChargingStateManuallyStopped;
         stopChargingAndTurnOffBMS();
     } else if (g_chargingState == ChargingStateManuallyStopped || g_chargingState == ChargingStateDoneCharging)  {
         // Go back to off, and re-enable the timer (or start charging again)
-#if DEBUG
-        Serial.println("Setting charging state to off so we can charge again (if the timer is enabled)");
-#endif
         g_chargingState = ChargingStateOff;
         setStandardStatusMessage();
     }
@@ -565,17 +620,39 @@ void loop() {
             if (!canCharge()) {
                 g_chargingState = ChargingStateOff;
                 stopChargingAndTurnOffBMS();
-            } else if (doneCharging()) {
+            } else if (isBMSHighLimitHit()) {
+                // Go into balancing of cells
+                g_chargingState = ChargingStateBalancingCells; // Set the state first, since startBalancingCells updates the status which is based on it
+                startBalancingCells();
+            }
+            break;
+        case ChargingStateBalancingCells:
+            // This state is similar to the charging state (things are still on!)
+            if (!canCharge()) {
+                g_chargingState = ChargingStateOff;
+                stopChargingAndTurnOffBMS();
+            } else if (doneBalancingCells()) {
                 g_chargingState = ChargingStateDoneCharging;
                 stopChargingAndTurnOffBMS();
+            } else {
+                // Update the menu where we show how many seconds are left when balancing
+                updateBalancingCellsStatus();
             }
             break;
         case ChargingStateManuallyStopped:
             // Don't do anything
             break;
         case ChargingStateDoneCharging:
-            // We don't do anyting; we are going to turn the arduino off after a delay
-
+            // When we hit this, delay a second...then turn off
+            delay(1000);
+            g_rootItem->setSecondLineMessage("...Turning off.");
+            g_menu.printItem(g_rootItem);    
+            delay(1000);
+            digitalWrite(PIN_ARDUINO_OFF, ARDUINO_MODE_TURN_OFF);
+            delay(1000); // Shouldn't need this...
+            // If we get back here, go manually off, so the user can stop again
+            g_chargingState = ChargingStateManuallyStopped;
+            setStandardStatusMessage();
             break;
     }
 }

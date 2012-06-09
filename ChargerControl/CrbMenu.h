@@ -41,6 +41,7 @@ public:
 
     void print(); // Writes to the lcd
     void printItem(CrbMenuItem *item); // Writes the message for this item, if it is the current item
+    void printItemLine2(CrbMenuItem *item); // Updates line 2 without clearing the LCD
 
     // Each menu item may call into this class to do the actual work of navigating the menu structure
     void gotoPriorSibling(); // Go "up" 
@@ -76,6 +77,7 @@ protected:
     
     // Called each loop() when active
     virtual void tick(CrbMenu *sender) { }
+    virtual void willBeShown(CrbMenu *sender) { } // Called once when the menu item is shown to allow it to udpate things
 
     friend class CrbMenu; // so it can access the above protected methods
 public:
@@ -116,6 +118,7 @@ public:
 class CrbTimeSetMenuItem : public CrbMenuItem {
 private:
     CrbMenuItemAction _action;
+    bool _shouldUpateTimeWhenShown; // updates our _time value from now() when shown
 protected:
     time_t _time;
     uint8_t _editLocation;
@@ -130,8 +133,10 @@ protected:
     void handleEnterButton(CrbMenu *sender);
     virtual void printLine2(Adafruit_RGBLCDShield *lcd);
     virtual void updateCursorForLine2(Adafruit_RGBLCDShield *lcd);
+    void willBeShown(CrbMenu *sender) { if (_shouldUpateTimeWhenShown) _time = now(); }
 public:
     time_t getTime() { return _time; }
+    void setShouldUpdateTimeWhenShown(bool value) { _shouldUpateTimeWhenShown = value; }
     // Fires the action on enter
     CrbTimeSetMenuItem(const char *name, CrbMenuItemAction action, time_t time);
 };
@@ -149,6 +154,7 @@ public:
 class CrbClockMenuItem : public CrbMenuItem {
 protected:    
     void tick(CrbMenu *sender);
+    void printLine2(Adafruit_RGBLCDShield *lcd);
 public:
     CrbClockMenuItem(const char *name);
 };

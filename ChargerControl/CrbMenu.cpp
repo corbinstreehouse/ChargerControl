@@ -7,6 +7,7 @@
 //
 
 #include "CrbMenu.h"
+#include "Time.h"
 
 CrbMenuItem::CrbMenuItem(const char *name) : _name(name) {
     _parent = _priorSibling = _nextSibling = _child = 0;
@@ -137,40 +138,40 @@ CrbTimeSetMenuItem::CrbTimeSetMenuItem(const char *name, CrbMenuItemAction actio
     _editLocation = EditingTimeLocationNotStarted;
 }
 
-static void _CrbPrintHour(time_t time, Adafruit_RGBLCDShield *lcd) {
-    int timeHour = hour(time);
-    int timeHourToPrint = timeHour > 12 ? timeHour - 12 : timeHour;
-    if (timeHourToPrint < 10) {
-        lcd->print("0");
+const char zeroCh = '0';
+
+static inline void _CrbPrintValue(int timeHour, Adafruit_RGBLCDShield *lcd) {
+    if (timeHour < 10) {
+        lcd->print(zeroCh);
     }
-    lcd->print(timeHourToPrint);
+    lcd->print(timeHour);
 }
 
-static void _CrbPrintMinute(time_t time, Adafruit_RGBLCDShield *lcd) {
-    int timeMinute = minute(time);
-    if (timeMinute < 10) {
-        lcd->print("0");
-    }
-    lcd->print(timeMinute);
-
-}
-
-void CrbTimeSetMenuItem::printLine2(Adafruit_RGBLCDShield *lcd) {
+static void _CrbPrintTime(time_t time, Adafruit_RGBLCDShield *lcd, bool includeSecond, bool includeAMPM) {
     lcd->setCursor(0,1);
-    _CrbPrintHour(_time, lcd);
+
+    _CrbPrintValue(hourFormat12(time), lcd);
     
     lcd->print(":");
     
-    _CrbPrintMinute(_time, lcd);
+    _CrbPrintValue(minute(time), lcd);
     
-    if (this->canEditAMPM()) {
-        if (hour(_time) > 12) {
+    if (includeSecond) {
+        lcd->print(":");
+        _CrbPrintValue(second(time), lcd);
+    }
+    
+    if (includeAMPM) {
+        if (hour(time) > 12) {
             lcd->print(" PM");
         } else {
             lcd->print(" AM");
         }
     }
-    
+}
+
+void CrbTimeSetMenuItem::printLine2(Adafruit_RGBLCDShield *lcd) {
+    _CrbPrintTime(_time, lcd, false, this->canEditAMPM());
     lcd->print(" [Enter]");
 }
 
@@ -346,11 +347,18 @@ void CrbMenu::printItem(CrbMenuItem *item) {
     }
 }
 
+void CrbMenu::printItemLine2(CrbMenuItem *item) {
+    if (_currentItem == item) {
+        _currentItem->printLine2(_lcd);
+    }
+}
+
 
 void CrbMenu::init(Adafruit_RGBLCDShield *lcd, CrbMenuItem *rootItem) {
     _lcd = lcd;
     _rootItem = rootItem;
     _currentItem = rootItem;
+    _currentItem->willBeShown(this);
     print();
 }
 
@@ -362,6 +370,7 @@ void CrbMenu::gotoPriorSibling() {
 #endif
     if (_currentItem->getPrior()) {
         _currentItem = _currentItem->getPrior();
+        _currentItem->willBeShown(this);
         this->print();
     }
 }
@@ -372,6 +381,7 @@ void CrbMenu::gotoNextSibling() {
 #endif
     if (_currentItem->getNext()) {
         _currentItem = _currentItem->getNext();
+        _currentItem->willBeShown(this);
         this->print();
     }
 }
@@ -382,6 +392,7 @@ void CrbMenu::gotoParent() {
 #endif
     if (_currentItem->getParent()) {
         _currentItem = _currentItem->getParent();
+        _currentItem->willBeShown(this);
         this->print();
     }
 }
@@ -392,6 +403,7 @@ void CrbMenu::gotoFirstChild() {
 #endif
     if (_currentItem->getChild()) {
         _currentItem = _currentItem->getChild();
+        _currentItem->willBeShown(this);
         this->print();
     }
 }
@@ -427,8 +439,12 @@ CrbClockMenuItem::CrbClockMenuItem(const char *name) : CrbMenuItem(name) {
     
 }
 
-// Create a timer every second that updates the clock but only when we are active
-void CrbClockMenuItem::tick(CrbMenu *sender) { 
-    
+void CrbClockMenuItem::printLine2(Adafruit_RGBLCDShield *lcd) {
+    lcd->setCursor(0,1);    
+    _CrbPrintTime(now(), lcd, true, true);
+}
 
+// Constantly update the time
+void CrbClockMenuItem::tick(CrbMenu *sender) { 
+    this->printLine2(sender->getLCD());
 }
