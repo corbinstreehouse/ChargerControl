@@ -28,7 +28,7 @@
 
 #include "CrbMenu.h"
 
-#define DEBUG 1
+#define DEBUG 0
 #define DEBUG_ERRORS 1 // Prints errors (you want this on until you are really sure things are right)
 
 #define LCD_COLUMNS 16
@@ -126,6 +126,7 @@ time_t g_balancingEndTime = 0;
 
 #define PIN_BMS_HLIM 2 // high when the BMS HLIM is hit and we should stop charging. Low otherwise
 
+#define PIN_CHARGING_STATUS 3
 #define PIN_BMS_POWER 4 // Turns on the BMS when HIGH
 #define PIN_EVSE_PILOT 5 // Turns on the pilot signal when HIGH
 #define PIN_CHARGER_OFF 6  // Turns off the charger when HIGH (by sending 5v to the manzanita micro's pin 2). A safety feature is the 5v signal from pin 1 of the charger is looped to the "normally closed" relay controlled by the BMS "high limit". The BMS opens the circuit to let the charger charge.
@@ -214,6 +215,10 @@ static inline void setInitialPinStates() {
     pinMode(PIN_ARDUINO_OFF, OUTPUT);
     digitalWrite(PIN_ARDUINO_OFF, ARDUINO_MODE_ALLOW_ON); // set to HIGH to turn off the arduino (and everything!)
     
+    pinMode(PIN_CHARGING_STATUS, OUTPUT);
+    digitalWrite(PIN_CHARGING_STATUS, LOW);
+    
+    
 //    pinMode(PIN_EVSE_PROXIMITY, INPUT); // The default value is input, don't bother setting it
 }
 
@@ -260,29 +265,35 @@ static inline time_t defaultsReadTime(int location) {
     return eeprom_read_dword((uint32_t *)location);
 }
 
-static void convertStartTimeToToday() {
+static void updateTimerTimes() {
     // Convert the start time to a time based on today
+    time_t nowTime = now();
     tmElements_t nowElements;
-    breakTime(now(), nowElements);
+    breakTime(nowTime, nowElements);
     tmElements_t startTimeElements;
     breakTime(g_startTime, startTimeElements);
     // Take the elements from now, and use the hour and minute from when to start (with a 0 second)
+    // However, if the time 
     nowElements.Hour = startTimeElements.Hour;
     nowElements.Minute = startTimeElements.Minute;
     nowElements.Second = 0;
     g_startTime = makeTime(nowElements);    
-}
 
-// must be called after convertStartTimeToToday()
-static void convertEndTimeToToday() {
-    // add the duration to the start to get an effective end time
+    // find the end time
     tmElements_t durationElements;
     breakTime(g_duration, durationElements);
-    tmElements_t resultElements;
-    breakTime(g_startTime, resultElements);
-    resultElements.Hour += durationElements.Hour;
-    resultElements.Minute += durationElements.Minute;
-    g_endTime = makeTime(resultElements);
+    g_endTime = g_startTime + durationElements.Hour*SECS_PER_HOUR + durationElements.Minute*SECS_PER_MIN;
+    
+    // If we are within the current duration; we are going to charge now. If the start time was past, then we want to start tomrrow..
+    if (nowTime >= g_startTime) {
+        if (nowTime < g_endTime) {
+            // Charging...
+        } else {
+            // End already happened, so add 24 hours to start tommorrow for these times
+            g_startTime += SECS_PER_DAY;
+            g_endTime += SECS_PER_DAY;
+        }
+    }
 }
 
 static inline time_t getChargingEndTime() {
@@ -292,7 +303,8 @@ static inline time_t getChargingEndTime() {
 static void ChargingSaveStartTimeAction(CrbTimeSetMenuItem *sender) {
     if (g_startTime != sender->getTime()) {
         g_startTime = sender->getTime();
-        convertStartTimeToToday();
+        updateTimerTimes();
+        setStandardStatusMessage();
         defaultsWriteTime(EE_CHARGING_START_TIME, g_startTime);
     }
 }
@@ -300,15 +312,11 @@ static void ChargingSaveStartTimeAction(CrbTimeSetMenuItem *sender) {
 static void ChargingSaveDurationAction(CrbTimeSetMenuItem *sender) {
     if (g_duration != sender->getTime()) {
         g_duration = sender->getTime();
-        convertEndTimeToToday();
+        updateTimerTimes();
+        setStandardStatusMessage();
         defaultsWriteTime(EE_CHARGING_DURATION_LOCATION, g_duration);
     }
 }
-
-
-//static void ChargingSaveDateAction(CrbTimeSetMenuItem *sender) {
-//    
-//}
 
 static void setCurrentTimeAction(CrbTimeSetMenuItem *sender) {
     // use juse the hour/minute from the sender
@@ -319,7 +327,13 @@ static void setCurrentTimeAction(CrbTimeSetMenuItem *sender) {
     nowTimeElements.Hour = newTimeElements.Hour;
     nowTimeElements.Minute = newTimeElements.Minute;
     time_t newTime = makeTime(nowTimeElements);
-    setTime(newTime); // Updates the RTC
+    
+    RTC.set(newTime);
+    setTime(newTime);
+    
+    // Update all our timer values, since the clock changed
+    updateTimerTimes();
+    setStandardStatusMessage();
 }
 
 static inline void loadSettings() {
@@ -337,9 +351,7 @@ static inline void loadSettings() {
     g_duration = defaultsReadTime(EE_CHARGING_DURATION_LOCATION);
 //    g_balanceDuration = EEPROM.read(EE_BALANCE_TIME); // Can we validate this duration?
     
-    convertStartTimeToToday();
-    // Only call after convertStartTimeToToday
-    convertEndTimeToToday();
+    updateTimerTimes();
 }
 
 static void ChargingModeEnter(CrbActionMenuItem *);
@@ -483,22 +495,29 @@ void updateBalancingCellsStatus() {
     
 }
 
+ProximityMode g_lastReadProxMode = ProximityModeUnknown;
+
 void setStandardStatusMessage() {
     ChargingState currentChargingState = getChargingState();
     if (currentChargingState == ChargingStateDoneCharging) {
-        g_rootItem->setName("Done charging...");
+        g_rootItem->setName("Done charging");
         g_rootItem->setSecondLineMessage(NULL);
     } else if (currentChargingState == ChargingStateManuallyStopped) {
-        g_rootItem->setName("Manually stopped...");
-        g_rootItem->setSecondLineMessage("[Enter to start again]");
+        g_rootItem->setName("Manually stopped");
+        g_rootItem->setSecondLineMessage("[Enter restart]");
     } else if (currentChargingState == ChargingStateBalancingCells) { 
-        g_rootItem->setName("Balancing cells...");
+        g_rootItem->setName("Balancing cells");
         updateBalancingCellsStatus();
     } else if (g_chargingMode == ChargingModeNormal) {
-        g_rootItem->setName("Waiting for the plug...");
+        g_rootItem->setName("Waiting for plug");
         g_rootItem->setSecondLineMessage(" -> Settings");
     } else if (g_chargingMode == ChargingModeTimed) {
-        g_rootItem->setName("Waiting for the timer at:");
+        g_lastReadProxMode = readProximityMode();
+        if (g_lastReadProxMode == ProximityModePluggedAndLatched) {
+            g_rootItem->setName("Timer set:");
+        } else {
+            g_rootItem->setName("Timer: Unplugged car!");
+        }
         time_t endTime = getChargingEndTime();
         // Make sure you don't overrun this buffer!
         sprintf(g_timeBuffer, "%02u:%02u%s-%02u:%02u%s", hourFormat12(g_startTime), minute(g_startTime), amOrPmStringForTime(g_startTime), hourFormat12(endTime), minute(endTime), amOrPmStringForTime(endTime));
@@ -517,9 +536,9 @@ void setup() {
 #endif
     // Order is pretty important!
     setInitialPinStates();
+    setupTime(); // Must be done early..before we load settings
     loadSettings();
     setupMenu();
-    setupTime();
 
     // Set the intitial state for the menu item
     setStandardStatusMessage();
@@ -557,6 +576,7 @@ static void turnOnBMSAndStartCharging() {
     // Stop signaling the charger to not charge (turn off the signal we send it). This is doubly controlled by the relay hooked up to the BMS.
     setChargerToMode(CHARGER_MODE_ON);
     updateRootMenuItemTitle("Charging...", "[Enter to stop]");
+    digitalWrite(PIN_CHARGING_STATUS, HIGH);     
 }
 
 static inline void startBalancingCells() {
@@ -582,6 +602,7 @@ static void stopChargingAndTurnOffBMS() {
     // Turn off the BMS
     setBMSToMode(BMS_MODE_TURNED_OFF);
     setStandardStatusMessage();
+    digitalWrite(PIN_CHARGING_STATUS, LOW); 
 }
 
 // NOTE: be careful on what we write to the state, as going from certain states to others might leave the charger charging!
@@ -613,6 +634,12 @@ void loop() {
                 // We can charge, do it
                 g_chargingState = ChargingStateCharging;
                 turnOnBMSAndStartCharging();
+            }
+            // If we are timed...see if we should update if we have the plug ready or not
+            if (g_chargingMode == ChargingModeTimed) {
+                if (g_lastReadProxMode != readProximityMode()) {
+                    setStandardStatusMessage();
+                }
             }
             break;
         case ChargingStateCharging:

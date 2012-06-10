@@ -32,6 +32,10 @@ private:
     Adafruit_RGBLCDShield *_lcd;
     CrbMenuItem *_rootItem;
     CrbMenuItem *_currentItem;
+    unsigned long _showStartTime;
+    int _characterScrolled;
+    
+    void showCurrentItem();
 public:
     CrbMenu();
     
@@ -79,6 +83,8 @@ protected:
     virtual void tick(CrbMenu *sender) { }
     virtual void willBeShown(CrbMenu *sender) { } // Called once when the menu item is shown to allow it to udpate things
 
+    int totalColumnCount();
+    
     friend class CrbMenu; // so it can access the above protected methods
 public:
     CrbMenuItem(const char *name);
@@ -123,7 +129,7 @@ protected:
     time_t _time;
     uint8_t _editLocation;
     
-    virtual bool canEditAMPM() { return true; }
+    virtual bool isDuration() { return false; }
     
     void handleUpButton(CrbMenu *sender);
     void handleDownButton(CrbMenu *sender);
@@ -144,7 +150,7 @@ public:
 // This is really an int editing option with a min/max
 class CrbDurationMenuItem : public CrbTimeSetMenuItem {
 protected:
-    bool canEditAMPM() { return false; }
+    bool isDuration() { return true; }
 //    void printLine2(Adafruit_RGBLCDShield *lcd);
 //    void updateCursorForLine2(Adafruit_RGBLCDShield *lcd);
 public:

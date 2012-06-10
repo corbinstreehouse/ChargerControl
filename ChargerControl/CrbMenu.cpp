@@ -8,6 +8,10 @@
 
 #include "CrbMenu.h"
 #include "Time.h"
+#include <string.h>
+
+#define LCD_COLUMNS 16
+#define SCROLL_WAIT 500
 
 CrbMenuItem::CrbMenuItem(const char *name) : _name(name) {
     _parent = _priorSibling = _nextSibling = _child = 0;
@@ -136,6 +140,7 @@ CrbTimeSetMenuItem::CrbTimeSetMenuItem(const char *name, CrbMenuItemAction actio
     _action = action;
     _time = time;
     _editLocation = EditingTimeLocationNotStarted;
+    _shouldUpateTimeWhenShown = false;
 }
 
 const char zeroCh = '0';
@@ -150,7 +155,8 @@ static inline void _CrbPrintValue(int timeHour, Adafruit_RGBLCDShield *lcd) {
 static void _CrbPrintTime(time_t time, Adafruit_RGBLCDShield *lcd, bool includeSecond, bool includeAMPM) {
     lcd->setCursor(0,1);
 
-    _CrbPrintValue(hourFormat12(time), lcd);
+    int printHour = includeAMPM ? hourFormat12(time) : hour(time);
+    _CrbPrintValue(printHour, lcd);
     
     lcd->print(":");
     
@@ -171,7 +177,7 @@ static void _CrbPrintTime(time_t time, Adafruit_RGBLCDShield *lcd, bool includeS
 }
 
 void CrbTimeSetMenuItem::printLine2(Adafruit_RGBLCDShield *lcd) {
-    _CrbPrintTime(_time, lcd, false, this->canEditAMPM());
+    _CrbPrintTime(_time, lcd, false, !this->isDuration());
     lcd->print(" [Enter]");
 }
 
@@ -208,10 +214,21 @@ void CrbTimeSetMenuItem::handleUpButton(CrbMenu *sender) {
     breakTime(_time, tm);
 
     if (_editLocation == EditingTimeLocationHour) {
+        // Keep the AM PM part right..
+        bool add12 = false;
+        if (!this->isDuration() && tm.Hour > 12) {
+            tm.Hour -= 12;
+            add12 = true;
+        }
         tm.Hour++;
         if (tm.Hour > 12) {
-            tm.Hour = 1; // Wrap
+            if (this->isDuration()) {
+                tm.Hour = 0; //Wrap to 0
+            } else {
+                tm.Hour = 1; // Wrap to 1
+            }
         }
+        if (add12) tm.Hour += 12;
     } else if (_editLocation == EditingTimeLocationMinuteTens) {
         tm.Minute += 10;
         if (tm.Minute >= 60) {
@@ -238,7 +255,8 @@ void CrbTimeSetMenuItem::handleDownButton(CrbMenu *sender) {
     breakTime(_time, tm);
     
     if (_editLocation == EditingTimeLocationHour) {
-        if (tm.Hour > 1) {
+        // Let it go to 0 if it is a duration edit; else, wrap to 12
+        if (tm.Hour > 1 || (this->isDuration() && tm.Hour >= 1)) {
             tm.Hour--; 
         } else {
             tm.Hour = 12; // wrap after 1
@@ -271,7 +289,7 @@ void CrbTimeSetMenuItem::handleLeftButton(CrbMenu *sender) {
     if (_editLocation > EditingTimeLocationNotStarted) {
         _editLocation--;
         if (_editLocation < EditingTimeLocationHour) {
-            _editLocation = this->canEditAMPM() ? EditingTimeLocationAMPM : EditingTimeLocationMinute; // wrap
+            _editLocation = this->isDuration() ? EditingTimeLocationMinute : EditingTimeLocationAMPM; // wrap
         }
         this->updateCursorForLine2(sender->getLCD());
     } else {
@@ -283,7 +301,7 @@ void CrbTimeSetMenuItem::handleRightButton(CrbMenu *sender) {
     // Implicitly starts editing if we aren't
     if (_editLocation > EditingTimeLocationNotStarted) {
         _editLocation++;
-        if (_editLocation > (this->canEditAMPM() ? EditingTimeLocationAMPM : EditingTimeLocationMinute)) {
+        if (_editLocation > (this->isDuration() ? EditingTimeLocationMinute : EditingTimeLocationAMPM)) {
             _editLocation = EditingTimeLocationHour; // wrap
         }
         this->updateCursorForLine2(sender->getLCD());
@@ -344,13 +362,24 @@ void CrbMenu::print() {
 void CrbMenu::printItem(CrbMenuItem *item) {
     if (_currentItem == item) {
         this->print();
+        // Scroll if we need to
     }
 }
 
 void CrbMenu::printItemLine2(CrbMenuItem *item) {
     if (_currentItem == item) {
         _currentItem->printLine2(_lcd);
+        // TODO: scroll timer
     }
+}
+
+
+
+void CrbMenu::showCurrentItem() {
+    _currentItem->willBeShown(this);
+    print();
+    _characterScrolled = 0;
+    _showStartTime = millis();
 }
 
 
@@ -358,7 +387,6 @@ void CrbMenu::init(Adafruit_RGBLCDShield *lcd, CrbMenuItem *rootItem) {
     _lcd = lcd;
     _rootItem = rootItem;
     _currentItem = rootItem;
-    _currentItem->willBeShown(this);
     print();
 }
 
@@ -370,8 +398,7 @@ void CrbMenu::gotoPriorSibling() {
 #endif
     if (_currentItem->getPrior()) {
         _currentItem = _currentItem->getPrior();
-        _currentItem->willBeShown(this);
-        this->print();
+        this->showCurrentItem();
     }
 }
 
@@ -381,8 +408,7 @@ void CrbMenu::gotoNextSibling() {
 #endif
     if (_currentItem->getNext()) {
         _currentItem = _currentItem->getNext();
-        _currentItem->willBeShown(this);
-        this->print();
+        this->showCurrentItem();
     }
 }
 
@@ -392,8 +418,7 @@ void CrbMenu::gotoParent() {
 #endif
     if (_currentItem->getParent()) {
         _currentItem = _currentItem->getParent();
-        _currentItem->willBeShown(this);
-        this->print();
+        this->showCurrentItem();
     }
 }
 
@@ -403,8 +428,7 @@ void CrbMenu::gotoFirstChild() {
 #endif
     if (_currentItem->getChild()) {
         _currentItem = _currentItem->getChild();
-        _currentItem->willBeShown(this);
-        this->print();
+        this->showCurrentItem();
     }
 }
 
@@ -433,6 +457,40 @@ void CrbMenu::loopOnce() {
         }
     }
     _currentItem->tick(this);
+    // Scroll the name, if necessary
+    int totalCount = _currentItem->totalColumnCount();
+    int amountToScroll = totalCount - LCD_COLUMNS;
+    if (amountToScroll > 0) {
+        unsigned long newNow = millis();
+        if ((newNow - _showStartTime) > SCROLL_WAIT) {
+            _showStartTime = newNow;
+            if (_characterScrolled >= 0) {
+                _characterScrolled++;
+                if (_characterScrolled > amountToScroll) {
+                    _characterScrolled *= -1; // Wait... 50ms before going back
+                } else {
+                    _lcd->scrollDisplayLeft();
+                }
+            } else {
+                // Going back to 0
+                _characterScrolled++;
+                if (_characterScrolled == 0) {
+                    // Wait
+                } else {
+                    _lcd->scrollDisplayRight();
+                }
+            }
+        }
+    }
+}
+        
+
+int CrbMenuItem::totalColumnCount() {
+    if (_name) {
+        return strlen(_name);
+    } else {
+        return 0;
+    }
 }
 
 CrbClockMenuItem::CrbClockMenuItem(const char *name) : CrbMenuItem(name) {
