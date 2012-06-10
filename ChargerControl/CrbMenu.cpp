@@ -136,11 +136,11 @@ typedef enum {
     EditingTimeLocationAMPM = 4,
 } EditingTimeLocation;
 
-CrbTimeSetMenuItem::CrbTimeSetMenuItem(const char *name, CrbMenuItemAction action, time_t time) : CrbMenuItem(name) {
+CrbTimeSetMenuItem::CrbTimeSetMenuItem(const char *name, CrbMenuItemAction action, time_t *timePointer) : CrbMenuItem(name) {
     _action = action;
-    _time = time;
+    _time = timePointer ? *timePointer : now();
+    _originalTime = timePointer;
     _editLocation = EditingTimeLocationNotStarted;
-    _shouldUpateTimeWhenShown = false;
 }
 
 const char zeroCh = '0';
@@ -323,7 +323,7 @@ void CrbTimeSetMenuItem::handleEnterButton(CrbMenu *sender) {
 #pragma mark - CrbDurationMenuItem
 
 
-CrbDurationMenuItem::CrbDurationMenuItem(const char *name, CrbMenuItemAction action, time_t time) : CrbTimeSetMenuItem(name, action, time) {
+CrbDurationMenuItem::CrbDurationMenuItem(const char *name, CrbMenuItemAction action, time_t *time) : CrbTimeSetMenuItem(name, action, time) {
     
 }
 
@@ -505,4 +505,50 @@ void CrbClockMenuItem::printLine2(Adafruit_RGBLCDShield *lcd) {
 // Constantly update the time
 void CrbClockMenuItem::tick(CrbMenu *sender) { 
     this->printLine2(sender->getLCD());
+}
+
+CrbNumberEditMenuItem::CrbNumberEditMenuItem(const char *name, uint8_t *originalValue) : CrbMenuItem(name) {
+    _originalValue = originalValue;
+    _currentValue = *originalValue;
+    _isEditing = false;
+}
+
+void CrbNumberEditMenuItem::printLine2(Adafruit_RGBLCDShield *lcd) {
+    lcd->setCursor(0,1);    
+    if (_currentValue < 100) {
+        lcd->print("0");
+    } else if (_currentValue < 10) {
+        lcd->print("0");
+    }
+    lcd->print(_currentValue);
+    
+    lcd->print(" mins [Enter]");
+}
+
+
+void CrbNumberEditMenuItem::handleUpButton(CrbMenu *sender) {
+    if (_isEditing) {
+        _currentValue++; // Use the tag as our temporary editing value. This wraps after 255 via overflow (how nice)
+        this->printLine2(sender->getLCD());
+    }
+}
+
+void CrbNumberEditMenuItem::handleDownButton(CrbMenu *sender) {
+    if (_isEditing) {
+        _currentValue--;
+        this->printLine2(sender->getLCD());
+    }
+}
+
+void CrbNumberEditMenuItem::handleEnterButton(CrbMenu *sender) {
+    _isEditing = !_isEditing;
+    Adafruit_RGBLCDShield *lcd = sender->getLCD();
+    if (_isEditing) {
+        lcd->setCursor(2, 1); 
+        lcd->blink();
+    } else {
+        lcd->noBlink();
+        // Update the value
+        *_originalValue = _currentValue;
+    }
 }

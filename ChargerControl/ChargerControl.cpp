@@ -349,7 +349,7 @@ static inline void loadSettings() {
     
     g_startTime = defaultsReadTime(EE_CHARGING_START_TIME);
     g_duration = defaultsReadTime(EE_CHARGING_DURATION_LOCATION);
-//    g_balanceDuration = EEPROM.read(EE_BALANCE_TIME); // Can we validate this duration?
+    g_balanceDuration = EEPROM.read(EE_BALANCE_TIME); // Can we validate this duration?
     
     updateTimerTimes();
 }
@@ -385,11 +385,15 @@ static inline void setupMenu() {
     // When this action 
     CrbMenuItem *itemSetStartTime = new CrbMenuItem("Set start time >");
     itemSettings->addChild(itemSetStartTime);
-    itemSetStartTime->addChild(new CrbTimeSetMenuItem("Start time", (CrbMenuItemAction)ChargingSaveStartTimeAction, g_startTime));
+    itemSetStartTime->addChild(new CrbTimeSetMenuItem("Start time", (CrbMenuItemAction)ChargingSaveStartTimeAction, &g_startTime));
 
     CrbMenuItem *itemTimerDuration = new CrbMenuItem("Set timer duration >");
     itemSettings->addChild(itemTimerDuration);
-    itemTimerDuration->addChild(new CrbDurationMenuItem("Duration", (CrbMenuItemAction)ChargingSaveDurationAction, g_duration));
+    itemTimerDuration->addChild(new CrbDurationMenuItem("Duration", (CrbMenuItemAction)ChargingSaveDurationAction, &g_duration));
+
+    CrbMenuItem *balanceDuration = new CrbMenuItem("Balance duration >");
+    itemSettings->addChild(balanceDuration);
+    balanceDuration->addChild(new CrbNumberEditMenuItem("Balance in mins", &g_balanceDuration));
     
     // TODO: how to initialize these variables...so it is showing the current time/date when the menu is shown?
 //    CrbMenuItem *itemSetDate = new CrbMenuItem("Set current date >");
@@ -398,8 +402,7 @@ static inline void setupMenu() {
 //
     CrbMenuItem *itemSetTime = new CrbClockMenuItem("Set current time >"); // shows the current time when visible..
     itemSettings->addChild(itemSetTime);
-    CrbTimeSetMenuItem *timeSetItem = new CrbTimeSetMenuItem("Set the time", (CrbMenuItemAction)setCurrentTimeAction, now());
-    timeSetItem->setShouldUpdateTimeWhenShown(true);
+    CrbTimeSetMenuItem *timeSetItem = new CrbTimeSetMenuItem("Set the time", (CrbMenuItemAction)setCurrentTimeAction, NULL);
     itemSetTime->addChild(timeSetItem);
 
     CrbMenuItem *clockMenuItem = new CrbClockMenuItem("Clock");

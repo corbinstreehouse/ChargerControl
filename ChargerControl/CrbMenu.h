@@ -12,8 +12,10 @@
 #include "Arduino.h"
 #include <Wire.h>
 #include <Time.h>  
+#include <stdint.h>
 
 #include "Adafruit_RGBLCDShield.h"
+
 
 #define DEBUG_MENU 0 // Set to 1 to debug the setup and stuff
 
@@ -112,8 +114,8 @@ typedef void (* CrbMenuItemAction)(CrbMenuItem *item);
 class CrbActionMenuItem : public CrbMenuItem {
 private:
     CrbMenuItemAction _action;
-    unsigned int _tag;
 protected:
+    unsigned int _tag;
     virtual void handleEnterButton(CrbMenu *sender);
 public:
     // Fires the action on enter
@@ -124,9 +126,9 @@ public:
 class CrbTimeSetMenuItem : public CrbMenuItem {
 private:
     CrbMenuItemAction _action;
-    bool _shouldUpateTimeWhenShown; // updates our _time value from now() when shown
 protected:
-    time_t _time;
+    time_t *_originalTime; // pointer to the original time; may be NULL
+    time_t _time; // the time we are editing; updated when the menu is shown
     uint8_t _editLocation;
     
     virtual bool isDuration() { return false; }
@@ -135,26 +137,24 @@ protected:
     void handleDownButton(CrbMenu *sender);
     void handleLeftButton(CrbMenu *sender);
     void handleRightButton(CrbMenu *sender);
-    
     void handleEnterButton(CrbMenu *sender);
+    
     virtual void printLine2(Adafruit_RGBLCDShield *lcd);
-    virtual void updateCursorForLine2(Adafruit_RGBLCDShield *lcd);
-    void willBeShown(CrbMenu *sender) { if (_shouldUpateTimeWhenShown) _time = now(); }
+    void updateCursorForLine2(Adafruit_RGBLCDShield *lcd);
+    void willBeShown(CrbMenu *sender) { if (_originalTime) _time = *_originalTime; else _time = now(); }
 public:
     time_t getTime() { return _time; }
-    void setShouldUpdateTimeWhenShown(bool value) { _shouldUpateTimeWhenShown = value; }
     // Fires the action on enter
-    CrbTimeSetMenuItem(const char *name, CrbMenuItemAction action, time_t time);
+    // NULL timePointer means we use now() as the value we are editing. Otherwise, we refresh our value to the pointer's value when being shown
+    CrbTimeSetMenuItem(const char *name, CrbMenuItemAction action, time_t *timePointer);
 };
 
 // This is really an int editing option with a min/max
 class CrbDurationMenuItem : public CrbTimeSetMenuItem {
 protected:
     bool isDuration() { return true; }
-//    void printLine2(Adafruit_RGBLCDShield *lcd);
-//    void updateCursorForLine2(Adafruit_RGBLCDShield *lcd);
 public:
-    CrbDurationMenuItem(const char *name, CrbMenuItemAction action, time_t time);
+    CrbDurationMenuItem(const char *name, CrbMenuItemAction action, time_t *time);
 };
 
 class CrbClockMenuItem : public CrbMenuItem {
@@ -163,6 +163,25 @@ protected:
     void printLine2(Adafruit_RGBLCDShield *lcd);
 public:
     CrbClockMenuItem(const char *name);
+};
+
+// Edits numbers; currently I only need uint8_t, but we could make it use ints if needed
+// NOTE: don't use the tag.
+class CrbNumberEditMenuItem : public CrbMenuItem { 
+private:
+    uint8_t _currentValue; // used when editing
+    uint8_t *_originalValue; // 0-255
+    bool _isEditing;
+
+    void handleUpButton(CrbMenu *sender);
+    void handleDownButton(CrbMenu *sender);
+    void handleEnterButton(CrbMenu *sender);
+    
+    virtual void printLine2(Adafruit_RGBLCDShield *lcd);
+    void willBeShown(CrbMenu *sender) { _currentValue = *_originalValue; }
+public:
+    CrbNumberEditMenuItem(const char *name, uint8_t *originalValue);
+    
 };
 
 
