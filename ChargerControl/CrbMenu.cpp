@@ -369,10 +369,8 @@ void CrbMenu::printItem(CrbMenuItem *item) {
 void CrbMenu::printItemLine2(CrbMenuItem *item) {
     if (_currentItem == item) {
         _currentItem->printLine2(_lcd);
-        // TODO: scroll timer
     }
 }
-
 
 
 void CrbMenu::showCurrentItem() {
@@ -399,6 +397,12 @@ void CrbMenu::gotoPriorSibling() {
     if (_currentItem->getPrior()) {
         _currentItem = _currentItem->getPrior();
         this->showCurrentItem();
+    } else {
+        // Wrap by walking to the end
+        while (_currentItem->getNext()) {
+            _currentItem = _currentItem->getNext();
+        }
+        this->showCurrentItem();
     }
 }
 
@@ -408,6 +412,12 @@ void CrbMenu::gotoNextSibling() {
 #endif
     if (_currentItem->getNext()) {
         _currentItem = _currentItem->getNext();
+        this->showCurrentItem();
+    } else {
+        // wrap
+        while (_currentItem->getPrior()) {
+            _currentItem = _currentItem->getPrior();
+        }
         this->showCurrentItem();
     }
 }
@@ -507,7 +517,7 @@ void CrbClockMenuItem::tick(CrbMenu *sender) {
     this->printLine2(sender->getLCD());
 }
 
-CrbNumberEditMenuItem::CrbNumberEditMenuItem(const char *name, uint8_t *originalValue) : CrbMenuItem(name) {
+CrbNumberEditMenuItem::CrbNumberEditMenuItem(const char *name, CrbMenuItemAction action, uint8_t *originalValue) : CrbActionMenuItem(name, action, 0) {
     _originalValue = originalValue;
     _currentValue = *originalValue;
     _isEditing = false;
@@ -517,7 +527,8 @@ void CrbNumberEditMenuItem::printLine2(Adafruit_RGBLCDShield *lcd) {
     lcd->setCursor(0,1);    
     if (_currentValue < 100) {
         lcd->print("0");
-    } else if (_currentValue < 10) {
+    }
+    if (_currentValue < 10) {
         lcd->print("0");
     }
     lcd->print(_currentValue);
@@ -551,4 +562,5 @@ void CrbNumberEditMenuItem::handleEnterButton(CrbMenu *sender) {
         // Update the value
         *_originalValue = _currentValue;
     }
+    CrbActionMenuItem::handleEnterButton(sender);
 }

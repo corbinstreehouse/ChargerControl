@@ -109,10 +109,8 @@ ChargingMode g_chargingMode = ChargingModeNormal;
 time_t g_startTime = 0; // we only read the hour/minute
 time_t g_duration = 0; // we only read the hour/minute
 time_t g_endTime = 0;
-uint8_t g_balanceDuration = 1; // In minutes; currently, not customizable via UI
+uint8_t g_balanceDuration = 1; // In minutes...i should just store a time_t for ore consistency
 time_t g_balancingEndTime = 0;
-// TODO: UI to customize the balance time. Validated from 0 - 255 minutes
-
 
 #pragma mark -
 #pragma mark Defines
@@ -148,12 +146,6 @@ time_t g_balancingEndTime = 0;
 
 #define ARDUINO_MODE_ALLOW_ON LOW
 #define ARDUINO_MODE_TURN_OFF HIGH
-
-static inline void updateRootMenuItemTitle(const char *title, const char *subtitle) {
-    g_rootItem->setName(title);
-    g_rootItem->setSecondLineMessage(subtitle);
-    g_menu.printItem(g_rootItem);
-}
 
 enum ProximityMode {
     ProximityModeUnknown = 0, // don't charge; something's wrong
@@ -318,6 +310,11 @@ static void ChargingSaveDurationAction(CrbTimeSetMenuItem *sender) {
     }
 }
 
+static void mnuSaveBalanceDurationAction(CrbMenuItem *sender) {
+    // the pointer updates our value already; just write it out
+    EEPROM.write(EE_BALANCE_TIME, g_balanceDuration);
+}
+
 static void setCurrentTimeAction(CrbTimeSetMenuItem *sender) {
     // use juse the hour/minute from the sender
     tmElements_t newTimeElements;
@@ -377,35 +374,30 @@ static inline void setupMenu() {
         itemTimedChargingMode->addOption(CrbMenuItemOptionSelected);
     }
     
-    // validate duration or the start time? 
-    
-    CrbMenuItem *itemSettings = new CrbMenuItem("Settings >");
-    g_rootItem->addChild(itemSettings);
-    
     // When this action 
     CrbMenuItem *itemSetStartTime = new CrbMenuItem("Set start time >");
-    itemSettings->addChild(itemSetStartTime);
+    g_rootItem->addChild(itemSetStartTime);
     itemSetStartTime->addChild(new CrbTimeSetMenuItem("Start time", (CrbMenuItemAction)ChargingSaveStartTimeAction, &g_startTime));
 
     CrbMenuItem *itemTimerDuration = new CrbMenuItem("Set timer duration >");
-    itemSettings->addChild(itemTimerDuration);
+    g_rootItem->addChild(itemTimerDuration);
     itemTimerDuration->addChild(new CrbDurationMenuItem("Duration", (CrbMenuItemAction)ChargingSaveDurationAction, &g_duration));
 
     CrbMenuItem *balanceDuration = new CrbMenuItem("Balance duration >");
-    itemSettings->addChild(balanceDuration);
-    balanceDuration->addChild(new CrbNumberEditMenuItem("Balance in mins", &g_balanceDuration));
-    
-    // TODO: how to initialize these variables...so it is showing the current time/date when the menu is shown?
+    g_rootItem->addChild(balanceDuration);
+    balanceDuration->addChild(new CrbNumberEditMenuItem("Balance in mins", (CrbMenuItemAction)mnuSaveBalanceDurationAction, &g_balanceDuration));
+
+    // I don't use the date..just the time. but it might be nice to set it.
 //    CrbMenuItem *itemSetDate = new CrbMenuItem("Set current date >");
-//    itemSettings->addChild(itemSetDate);
+//    g_rootItem->addChild(itemSetDate);
 //    itemSetDate->addChild(new CrbTimeSetMenuItem("Set the date", (CrbMenuItemAction)ChargingSaveDateAction, 0));
 //
-    CrbMenuItem *itemSetTime = new CrbClockMenuItem("Set current time >"); // shows the current time when visible..
-    itemSettings->addChild(itemSetTime);
+    CrbMenuItem *itemSetTime = new CrbClockMenuItem("Set time >"); // shows the current time when visible..
+    g_rootItem->addChild(itemSetTime);
     CrbTimeSetMenuItem *timeSetItem = new CrbTimeSetMenuItem("Set the time", (CrbMenuItemAction)setCurrentTimeAction, NULL);
     itemSetTime->addChild(timeSetItem);
 
-    CrbMenuItem *clockMenuItem = new CrbClockMenuItem("Clock");
+    CrbMenuItem *clockMenuItem = new CrbClockMenuItem("   - Clock - ");
     g_rootItem->addChild(clockMenuItem);
     
     g_menu.init(&g_lcd, g_rootItem);
@@ -502,7 +494,18 @@ ProximityMode g_lastReadProxMode = ProximityModeUnknown;
 
 void setStandardStatusMessage() {
     ChargingState currentChargingState = getChargingState();
-    if (currentChargingState == ChargingStateDoneCharging) {
+    if (currentChargingState == ChargingStateCharging) {
+        g_rootItem->setName("Charging...");
+        if (g_chargingMode == ChargingModeNormal) {
+            g_rootItem->setSecondLineMessage("...to 100% SOC");
+        } else {
+            // Show when we will be done charging at
+            time_t endTime = getChargingEndTime();
+            // Make sure you don't overrun this buffer!
+            sprintf(g_timeBuffer, "...until %02u:%02u%s", hourFormat12(endTime), minute(endTime), amOrPmStringForTime(endTime));
+            g_rootItem->setSecondLineMessage(g_timeBuffer);
+        }
+    } else if (currentChargingState == ChargingStateDoneCharging) {
         g_rootItem->setName("Done charging");
         g_rootItem->setSecondLineMessage(NULL);
     } else if (currentChargingState == ChargingStateManuallyStopped) {
@@ -578,7 +581,6 @@ static void turnOnBMSAndStartCharging() {
     // At this point, the EVSE will open its relay and give the charger power
     // Stop signaling the charger to not charge (turn off the signal we send it). This is doubly controlled by the relay hooked up to the BMS.
     setChargerToMode(CHARGER_MODE_ON);
-    updateRootMenuItemTitle("Charging...", "[Enter to stop]");
     digitalWrite(PIN_CHARGING_STATUS, HIGH);     
 }
 
@@ -637,6 +639,7 @@ void loop() {
                 // We can charge, do it
                 g_chargingState = ChargingStateCharging;
                 turnOnBMSAndStartCharging();
+                setStandardStatusMessage();
             }
             // If we are timed...see if we should update if we have the plug ready or not
             if (g_chargingMode == ChargingModeTimed) {

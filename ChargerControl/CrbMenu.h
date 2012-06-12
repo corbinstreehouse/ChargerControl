@@ -167,7 +167,7 @@ public:
 
 // Edits numbers; currently I only need uint8_t, but we could make it use ints if needed
 // NOTE: don't use the tag.
-class CrbNumberEditMenuItem : public CrbMenuItem { 
+class CrbNumberEditMenuItem : public CrbActionMenuItem { 
 private:
     uint8_t _currentValue; // used when editing
     uint8_t *_originalValue; // 0-255
@@ -180,7 +180,7 @@ private:
     virtual void printLine2(Adafruit_RGBLCDShield *lcd);
     void willBeShown(CrbMenu *sender) { _currentValue = *_originalValue; }
 public:
-    CrbNumberEditMenuItem(const char *name, uint8_t *originalValue);
+    CrbNumberEditMenuItem(const char *name, CrbMenuItemAction action, uint8_t *originalValue);
     
 };
 
