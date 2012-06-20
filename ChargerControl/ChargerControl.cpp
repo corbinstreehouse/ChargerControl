@@ -132,14 +132,25 @@ time_t g_balancingEndTime = 0;
 #define PIN_EVSE_PROXIMITY A0
 
 // aliases to make the code more readable when setting values for the pins
-#define BMS_HLIM_REACHED LOW // When the 5v is pulled down to 0 by the BMS, we have reached the "high limit"
-#define BMS_HLIM_NOT_REACHED HIGH // Normally 5v
+#define BMS_HLIM_REACHED HIGH // When at 5v the BMS has opened the circuit telling us the HLIM was hit
+#define BMS_HLIM_NOT_REACHED LOW // The BMS pulls the line to ground making it low when it is okay to charge
 
 #define BMS_MODE_TURNED_ON HIGH
 #define BMS_MODE_TURNED_OFF LOW
 
-#define PILOT_SIGNAL_MODE_ON HIGH
-#define PILOT_SIGNAL_MODE_OFF LOW
+#define PILOT_USING_RELAY 1 // WARNING: You want this at 1 meaning we are going to use a relay to pull the pilot signal down. It is the safest for the way things are setup.
+
+#if PILOT_USING_RELAY
+    #define PILOT_SIGNAL_MODE_ON HIGH // turn on the relay, which pulls the EVSE signal to ground
+    #define PILOT_SIGNAL_MODE_OFF LOW
+#else
+    // We have to use a relay to pull the pilot signal down to ground. Sure, it does work to do it with the arduino pin, but the problem is it pulls to ground when the arduino is off! That isn't great for safety, in case the arduino turns off. It would also mean that you have to turn on the arduino before plugging in; otherwise, the charger would turn on when you plug in (since the EVSE would get the pilot pulled to ground). That seemed bad to me. It would be okay if you had the ardunio built into part of the charger (as is done in the DIY 10kw charger on diyelectric car by valery).
+    #define PILOT_SIGNAL_MODE_ON LOW // pull to low (ground) to signal the EVSE
+    #define PILOT_SIGNAL_MODE_OFF HIGH
+#endif
+
+#define ADD_TURN_OFF_MENU_ITEM 0 // adds a menu item to turn off the pololu; this isn't needed as you can do it by hitting the on/off button again
+
 
 #define CHARGER_MODE_ON LOW // Low signal cuts the 5v, letting it go on
 #define CHARGER_MODE_OFF HIGH
@@ -333,6 +344,10 @@ static void setCurrentTimeAction(CrbTimeSetMenuItem *sender) {
     setStandardStatusMessage();
 }
 
+#if ADD_TURN_OFF_MENU_ITEM
+static void mnuTurnOff(CrbMenuItem *sender);
+#endif
+
 static inline void loadSettings() {
     // TODO: the first time we ever power on, it would be nice to clear out the EEPROM to all 0, so we know what the defaults are for everything
     
@@ -396,6 +411,12 @@ static inline void setupMenu() {
     g_rootItem->addChild(itemSetTime);
     CrbTimeSetMenuItem *timeSetItem = new CrbTimeSetMenuItem("Set the time", (CrbMenuItemAction)setCurrentTimeAction, NULL);
     itemSetTime->addChild(timeSetItem);
+    
+#if ADD_TURN_OFF_MENU_ITEM
+    CrbMenuItem *itemTurnOff = new CrbMenuItem("Turn off >");
+    g_rootItem->addChild(itemTurnOff);
+    itemTurnOff->addChild(new CrbActionMenuItem("Enter to turn off", (CrbMenuItemAction)mnuTurnOff, 0));
+#endif
 
     CrbMenuItem *clockMenuItem = new CrbClockMenuItem("   - Clock - ");
     g_rootItem->addChild(clockMenuItem);
@@ -629,6 +650,21 @@ static void ChargingModeEnter(CrbActionMenuItem *) {
     }
 }
 
+#if ADD_TURN_OFF_MENU_ITEM
+static void mnuTurnOff(CrbMenuItem *sender) {
+    // stop the charger, if we are charging
+    if (g_chargingState == ChargingStateCharging || g_chargingState == ChargingStateBalancingCells){
+        g_chargingState = ChargingStateDoneCharging;
+        stopChargingAndTurnOffBMS();
+    } else {
+        g_chargingState = ChargingStateDoneCharging;
+    }
+    // go back to the root menu item so we can display the results
+    g_menu.gotoRootItem();
+}
+#endif
+
+
 void loop() {
     g_menu.loopOnce();
     
@@ -676,8 +712,8 @@ void loop() {
             // Don't do anything
             break;
         case ChargingStateDoneCharging:
-            // When we hit this, delay a second...then turn off
-            delay(1000);
+            // When we hit this, delay a short bit...then turn off
+            delay(500);
             g_rootItem->setSecondLineMessage("...Turning off.");
             g_menu.printItem(g_rootItem);    
             delay(1000);

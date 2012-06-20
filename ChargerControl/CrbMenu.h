@@ -54,6 +54,7 @@ public:
     void gotoNextSibling(); // Go "down"
     void gotoParent(); // Go "left"  (aka: back)
     void gotoFirstChild(); // Go "right" (aka next)
+    void gotoRootItem();
     
     inline Adafruit_RGBLCDShield *getLCD() { return _lcd; }
 };

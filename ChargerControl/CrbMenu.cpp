@@ -442,6 +442,13 @@ void CrbMenu::gotoFirstChild() {
     }
 }
 
+void CrbMenu::gotoRootItem() {
+    while (_currentItem->getParent()) {
+        _currentItem = _currentItem->getParent();
+    }
+    this->showCurrentItem();
+}
+
 void CrbMenu::loopOnce() {
     uint8_t buttons = _lcd->readButtons();
     if (buttons && _currentItem) {
