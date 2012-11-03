@@ -111,6 +111,7 @@ time_t g_duration = 0; // we only read the hour/minute
 time_t g_endTime = 0;
 uint8_t g_balanceDuration = 1; // In minutes...i should just store a time_t for ore consistency
 time_t g_balancingEndTime = 0;
+bool g_ignoreProximitySignal = false; // Turn on to charge off 120v or when you don't have the J1772 plug 
 
 #pragma mark -
 #pragma mark Defines
@@ -348,6 +349,8 @@ static void setCurrentTimeAction(CrbTimeSetMenuItem *sender) {
 static void mnuTurnOff(CrbMenuItem *sender);
 #endif
 
+static void mnuIgnoreProximityStateAction(CrbMenuItem *sender);
+
 static inline void loadSettings() {
     // TODO: the first time we ever power on, it would be nice to clear out the EEPROM to all 0, so we know what the defaults are for everything
     
@@ -411,6 +414,10 @@ static inline void setupMenu() {
     g_rootItem->addChild(itemSetTime);
     CrbTimeSetMenuItem *timeSetItem = new CrbTimeSetMenuItem("Set the time", (CrbMenuItemAction)setCurrentTimeAction, NULL);
     itemSetTime->addChild(timeSetItem);
+    
+    CrbMenuItem *itemIgnoreProximitySignal = new CrbMenuItem("Ignore proximity signal >");
+    g_rootItem->addChild(itemIgnoreProximitySignal);
+    itemIgnoreProximitySignal->addChild(new CrbActionMenuItem("Enter to flip", (CrbMenuItemAction)mnuIgnoreProximityStateAction, 0));
     
 #if ADD_TURN_OFF_MENU_ITEM
     CrbMenuItem *itemTurnOff = new CrbMenuItem("Turn off >");
@@ -585,7 +592,7 @@ static bool canCharge() {
         result = true;
     }
     
-    if (result) {
+    if (result && !g_ignoreProximitySignal) {
         // Ideally we should look for the 12v pilot signal. I don't have anything that reads the signal. It would be interesting to see if the current passing through the signal is less than 40mA. If it is, the arduino pin can be set as an OUTPUT and sink the current (I think this means take it to ground). notes http://arduino.cc/en/Tutorial/DigitalPins
         // Instead, see if we can charge by looking for the proximity signal to be correct. 
         ProximityMode proximityMode = readProximityMode();
@@ -625,8 +632,10 @@ static void stopChargingAndTurnOffBMS() {
     setPilotSignalToMode(PILOT_SIGNAL_MODE_OFF);
     Alarm.delay(500); // TODO make sure 500ms (half a second) is long enough to wait before we turn off the BMS
     
-    // Turn off the BMS
-    setBMSToMode(BMS_MODE_TURNED_OFF);
+    // Turn off the BMS ONLY if  the proximity signal isn't ignored; otherwise, we may not be able to control the EVSE because we are doing manual 110v charging
+    if (!g_ignoreProximitySignal) {
+        setBMSToMode(BMS_MODE_TURNED_OFF);
+    }
     setStandardStatusMessage();
     digitalWrite(PIN_CHARGING_STATUS, LOW); 
 }
@@ -664,6 +673,27 @@ static void mnuTurnOff(CrbMenuItem *sender) {
 }
 #endif
 
+static void mnuIgnoreProximityStateAction(CrbMenuItem *sender) {
+    g_ignoreProximitySignal = !g_ignoreProximitySignal;
+}
+
+// One problem with the way this is setup:
+/* When the BMS is turned on we immedietly go into a "charging" mode. However, the BMS takes a bit of time to boot up, and will leave the HLIM pull down open (indicating the charger shouldn't charge until it explicitly pulls it to ground). So, we wait until it pulled it to ground once before reading the open state. However, if it doesn't pull it down in X seconds, we will assume that the charging is really done, and go into charging done. 
+ 
+ */
+static time_t g_chargingStartTime = 0;
+#define DURATION_TO_WAIT_FOR_CHARGER_TO_START 15 // seconds
+
+static void goIntoTheStartChargingState() {
+    g_chargingState = ChargingStateCharging;
+    g_chargingStartTime = now();
+    turnOnBMSAndStartCharging();
+    setStandardStatusMessage();
+}
+
+static inline bool durationPassedWaitingForBMSToStartTheCharger() {
+    return (now() - g_chargingStartTime) > DURATION_TO_WAIT_FOR_CHARGER_TO_START;
+}
 
 void loop() {
     g_menu.loopOnce();
@@ -673,9 +703,7 @@ void loop() {
             // Check to see if we can move to the next charging state
             if (canCharge()) {
                 // We can charge, do it
-                g_chargingState = ChargingStateCharging;
-                turnOnBMSAndStartCharging();
-                setStandardStatusMessage();
+                goIntoTheStartChargingState();
             }
             // If we are timed...see if we should update if we have the plug ready or not
             if (g_chargingMode == ChargingModeTimed) {
@@ -690,9 +718,13 @@ void loop() {
                 g_chargingState = ChargingStateOff;
                 stopChargingAndTurnOffBMS();
             } else if (isBMSHighLimitHit()) {
-                // Go into balancing of cells
-                g_chargingState = ChargingStateBalancingCells; // Set the state first, since startBalancingCells updates the status which is based on it
-                startBalancingCells();
+                // See the note above g_chargingStartTime. 
+                // We may be in the "charging" state, but the BMS may not have had time to pull down the HLIM (indicating the charger should charge). 
+                if (durationPassedWaitingForBMSToStartTheCharger()) {
+                    // Go into balancing of cells
+                    g_chargingState = ChargingStateBalancingCells; // Set the state first, since startBalancingCells updates the status which is based on it
+                    startBalancingCells();
+                }
             }
             break;
         case ChargingStateBalancingCells:
@@ -701,7 +733,14 @@ void loop() {
                 g_chargingState = ChargingStateOff;
                 stopChargingAndTurnOffBMS();
             } else if (doneBalancingCells()) {
-                g_chargingState = ChargingStateDoneCharging;
+                // If we are done...leave the BMS on if we are not using the proxmity signal
+                // TODO: better is to see if the charger is still on by sensing its 5v input and never turning the BMS off if the 5v is still on
+                if (g_ignoreProximitySignal) {
+                    g_chargingState = ChargingStateManuallyStopped;
+                } else {
+                    // prepare to turn off!
+                    g_chargingState = ChargingStateDoneCharging;
+                }
                 stopChargingAndTurnOffBMS();
             } else {
                 // Update the menu where we show how many seconds are left when balancing
