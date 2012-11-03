@@ -152,6 +152,7 @@ static inline void _CrbPrintValue(int timeHour, Adafruit_RGBLCDShield *lcd) {
     lcd->print(timeHour);
 }
 
+
 static void _CrbPrintTime(time_t time, Adafruit_RGBLCDShield *lcd, bool includeSecond, bool includeAMPM) {
     lcd->setCursor(0,1);
 
@@ -174,6 +175,11 @@ static void _CrbPrintTime(time_t time, Adafruit_RGBLCDShield *lcd, bool includeS
             lcd->print(" AM");
         }
     }
+}
+
+void CrbMenuItem::printTimeOnSecondLine(Adafruit_RGBLCDShield *lcd) {
+    lcd->setCursor(0,1);
+    _CrbPrintTime(now(), lcd, true, true);
 }
 
 void CrbTimeSetMenuItem::printLine2(Adafruit_RGBLCDShield *lcd) {
@@ -515,8 +521,7 @@ CrbClockMenuItem::CrbClockMenuItem(const char *name) : CrbMenuItem(name) {
 }
 
 void CrbClockMenuItem::printLine2(Adafruit_RGBLCDShield *lcd) {
-    lcd->setCursor(0,1);    
-    _CrbPrintTime(now(), lcd, true, true);
+    printTimeOnSecondLine(lcd);
 }
 
 // Constantly update the time

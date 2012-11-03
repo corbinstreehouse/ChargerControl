@@ -91,10 +91,11 @@ typedef uint8_t ChargingMode;
 
 enum _ChargingState {
     ChargingStateOff = 0, // Not doing anything
-    ChargingStateCharging = 1, // Charging! We will actively look for the promity state to change, and stop charging when it changes. If it changes, we go to "stops" because we are being unplugged
-    ChargingStateDoneCharging = 2, // Charging is done; we should turn off after a delay
-    ChargingStateBalancingCells = 3, // After charging is done, we will balance the cells for g_balanceDuration
-    ChargingStateManuallyStopped = 4,
+    ChargingStateWaitingForBMS = 1, // Waiting for the BMS to boot up and pull the HLIM down indicating we can start charging.
+    ChargingStateCharging = 2, // Charging! We will actively look for the promity state to change, and stop charging when it changes. If it changes, we go to "stops" because we are being unplugged
+    ChargingStateDoneCharging = 3, // Charging is done; we should turn off after a delay
+    ChargingStateBalancingCells = 4, // After charging is done, we will balance the cells for g_balanceDuration
+    ChargingStateManuallyStopped = 5,
 };
 typedef uint8_t ChargingState;
 
@@ -521,8 +522,12 @@ void updateBalancingCellsStatus() {
 ProximityMode g_lastReadProxMode = ProximityModeUnknown;
 
 void setStandardStatusMessage() {
+ 
     ChargingState currentChargingState = getChargingState();
-    if (currentChargingState == ChargingStateCharging) {
+    if (currentChargingState == ChargingStateWaitingForBMS) {
+        g_rootItem->setName("Waiting for BMS");
+        g_rootItem->setSecondLineMessage("...high limit on");
+    } else if (currentChargingState == ChargingStateCharging) {
         g_rootItem->setName("Charging...");
         if (g_chargingMode == ChargingModeNormal) {
             g_rootItem->setSecondLineMessage("...to 100% SOC");
@@ -539,7 +544,7 @@ void setStandardStatusMessage() {
     } else if (currentChargingState == ChargingStateManuallyStopped) {
         g_rootItem->setName("Manually stopped");
         g_rootItem->setSecondLineMessage("[Enter restart]");
-    } else if (currentChargingState == ChargingStateBalancingCells) { 
+    } else if (currentChargingState == ChargingStateBalancingCells) {
         g_rootItem->setName("Balancing cells");
         updateBalancingCellsStatus();
     } else if (g_chargingMode == ChargingModeNormal) {
@@ -601,15 +606,18 @@ static bool canCharge() {
     return result;
 }
 
-static void turnOnBMSAndStartCharging() {
-    // Make sure the BMS is on before we turn on the charger
-    setBMSToMode(BMS_MODE_TURNED_ON);
+static inline void turnOnEVSEAndCharger() {
     // Then tell the EVSE to give us power
     setPilotSignalToMode(PILOT_SIGNAL_MODE_ON);
     // At this point, the EVSE will open its relay and give the charger power
     // Stop signaling the charger to not charge (turn off the signal we send it). This is doubly controlled by the relay hooked up to the BMS.
     setChargerToMode(CHARGER_MODE_ON);
-    digitalWrite(PIN_CHARGING_STATUS, HIGH);     
+    digitalWrite(PIN_CHARGING_STATUS, HIGH);
+}
+
+static inline void turnOnBMS() {
+    // Make sure the BMS is on before we turn on the charger
+    setBMSToMode(BMS_MODE_TURNED_ON);
 }
 
 static inline void startBalancingCells() {
@@ -627,7 +635,7 @@ static void stopChargingAndTurnOffBMS() {
     // We "soft stop" the charger by sending it 5v; this kills it right away, and makes it stop drawing amps
     setChargerToMode(CHARGER_MODE_OFF);
     // Wait a bit, and then signal the EVSE that we are off
-    Alarm.delay(200); // TODO make sure 200ms is enough time for the charger to stop; we need to make this as short as possible, since we might be being unplugged and prefer to turn off the pilot signal ourselves
+    Alarm.delay(500); // TODO: (NOTE: 200ms wasn't enough time)... make sure 500ms is enough time for the charger to stop; we need to make this as short as possible, since we might be being unplugged and prefer to turn off the pilot signal ourselves
     // Turn off the pilot signal; this cuts the power to the charger
     setPilotSignalToMode(PILOT_SIGNAL_MODE_OFF);
     Alarm.delay(500); // TODO make sure 500ms (half a second) is long enough to wait before we turn off the BMS
@@ -649,7 +657,7 @@ ChargingState getChargingState() {
 
 static void ChargingModeEnter(CrbActionMenuItem *) {
     // Manually turn charging off if we are charging 
-    if (g_chargingState == ChargingStateCharging || g_chargingState == ChargingStateBalancingCells){
+    if (g_chargingState == ChargingStateWaitingForBMS || g_chargingState == ChargingStateCharging || g_chargingState == ChargingStateBalancingCells){
         g_chargingState = ChargingStateManuallyStopped;
         stopChargingAndTurnOffBMS();
     } else if (g_chargingState == ChargingStateManuallyStopped || g_chargingState == ChargingStateDoneCharging)  {
@@ -662,7 +670,7 @@ static void ChargingModeEnter(CrbActionMenuItem *) {
 #if ADD_TURN_OFF_MENU_ITEM
 static void mnuTurnOff(CrbMenuItem *sender) {
     // stop the charger, if we are charging
-    if (g_chargingState == ChargingStateCharging || g_chargingState == ChargingStateBalancingCells){
+    if (gChargingState == ChargingStateWaitingForBMS || g_chargingState == ChargingStateCharging || g_chargingState == ChargingStateBalancingCells){
         g_chargingState = ChargingStateDoneCharging;
         stopChargingAndTurnOffBMS();
     } else {
@@ -677,22 +685,17 @@ static void mnuIgnoreProximityStateAction(CrbMenuItem *sender) {
     g_ignoreProximitySignal = !g_ignoreProximitySignal;
 }
 
-// One problem with the way this is setup:
-/* When the BMS is turned on we immedietly go into a "charging" mode. However, the BMS takes a bit of time to boot up, and will leave the HLIM pull down open (indicating the charger shouldn't charge until it explicitly pulls it to ground). So, we wait until it pulled it to ground once before reading the open state. However, if it doesn't pull it down in X seconds, we will assume that the charging is really done, and go into charging done. 
- 
- */
-static time_t g_chargingStartTime = 0;
-#define DURATION_TO_WAIT_FOR_CHARGER_TO_START 15 // seconds
-
-static void goIntoTheStartChargingState() {
-    g_chargingState = ChargingStateCharging;
-    g_chargingStartTime = now();
-    turnOnBMSAndStartCharging();
+static inline void goIntoTheWaitingForBMSState() {
+    g_chargingState = ChargingStateWaitingForBMS;
+    turnOnBMS();
     setStandardStatusMessage();
 }
 
-static inline bool durationPassedWaitingForBMSToStartTheCharger() {
-    return (now() - g_chargingStartTime) > DURATION_TO_WAIT_FOR_CHARGER_TO_START;
+
+static void goIntoTheStartChargingState() {
+    g_chargingState = ChargingStateCharging;
+    turnOnEVSEAndCharger();
+    setStandardStatusMessage();
 }
 
 void loop() {
@@ -703,7 +706,7 @@ void loop() {
             // Check to see if we can move to the next charging state
             if (canCharge()) {
                 // We can charge, do it
-                goIntoTheStartChargingState();
+                goIntoTheWaitingForBMSState();
             }
             // If we are timed...see if we should update if we have the plug ready or not
             if (g_chargingMode == ChargingModeTimed) {
@@ -712,19 +715,20 @@ void loop() {
                 }
             }
             break;
+        case ChargingStateWaitingForBMS:
+            // Once we have the BMS High Limit turned off, we can move to the charging state
+            if (!isBMSHighLimitHit()){
+                goIntoTheStartChargingState();
+            }
+            break;
         case ChargingStateCharging:
             // Check to see if we need to stop charging, because the timer stopped, or the proximity switch was flipped
             if (!canCharge()) {
                 g_chargingState = ChargingStateOff;
                 stopChargingAndTurnOffBMS();
             } else if (isBMSHighLimitHit()) {
-                // See the note above g_chargingStartTime. 
-                // We may be in the "charging" state, but the BMS may not have had time to pull down the HLIM (indicating the charger should charge). 
-                if (durationPassedWaitingForBMSToStartTheCharger()) {
-                    // Go into balancing of cells
-                    g_chargingState = ChargingStateBalancingCells; // Set the state first, since startBalancingCells updates the status which is based on it
-                    startBalancingCells();
-                }
+                g_chargingState = ChargingStateBalancingCells; // Set the state first, since startBalancingCells updates the status which is based on it
+                startBalancingCells();
             }
             break;
         case ChargingStateBalancingCells:

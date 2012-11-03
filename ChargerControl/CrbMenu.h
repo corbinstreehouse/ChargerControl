@@ -89,11 +89,13 @@ protected:
     int totalColumnCount();
     
     friend class CrbMenu; // so it can access the above protected methods
+
+    void printTimeOnSecondLine(Adafruit_RGBLCDShield *lcd);
 public:
     CrbMenuItem(const char *name);
     
     inline void setSecondLineMessage(const char *msg) { _secondLineMessage = msg; }
-    
+
 	inline CrbMenuItem *getParent() const { return _parent; }
 	inline CrbMenuItem *getPrior() const { return _priorSibling; }
 	inline CrbMenuItem *getNext() const { return _nextSibling; }
@@ -184,6 +186,5 @@ public:
     CrbNumberEditMenuItem(const char *name, CrbMenuItemAction action, uint8_t *originalValue);
     
 };
-
 
 #endif
