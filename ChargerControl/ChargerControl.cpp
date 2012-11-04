@@ -154,8 +154,8 @@ bool g_ignoreProximitySignal = false; // Turn on to charge off 120v or when you 
 #define ADD_TURN_OFF_MENU_ITEM 0 // adds a menu item to turn off the pololu; this isn't needed as you can do it by hitting the on/off button again
 
 
-#define CHARGER_MODE_ON LOW // Low signal cuts the 5v, letting it go on
-#define CHARGER_MODE_OFF HIGH
+#define CHARGER_MODE_ON HIGH // High signal to pull the relay on, cutting the 5v loop that the charger sees from itself
+#define CHARGER_MODE_OFF LOW // Low signal, to turn the relay off, allowing the 5v loop on the charger to turn itself off
 
 #define ARDUINO_MODE_ALLOW_ON LOW
 #define ARDUINO_MODE_TURN_OFF HIGH
@@ -470,6 +470,16 @@ static inline void setBMSToMode(uint8_t mode) {
 
 static inline void setChargerToMode(uint8_t mode) {
     // Just set the pin; we don't need to wait for anything to happen
+#if DEBUG
+    if (mode != digitalRead(PIN_CHARGER_OFF)) {
+        if (mode == CHARGER_MODE_OFF) {
+            Serial.println("Turning charger off ");
+        } else {
+            Serial.println("Turning charger on ");
+        }
+    }
+#endif
+
     digitalWrite(PIN_CHARGER_OFF, mode);
 }
 
@@ -571,7 +581,7 @@ void setStandardStatusMessage() {
 void setup() {
     Serial.begin(9600);
 #if DEBUG
-    Serial.println("setup"); 
+    Serial.println("setup");
 #endif
     // Order is pretty important!
     setInitialPinStates();
@@ -635,10 +645,15 @@ static void stopChargingAndTurnOffBMS() {
     // We "soft stop" the charger by sending it 5v; this kills it right away, and makes it stop drawing amps
     setChargerToMode(CHARGER_MODE_OFF);
     // Wait a bit, and then signal the EVSE that we are off
-    Alarm.delay(500); // TODO: (NOTE: 200ms wasn't enough time)... make sure 500ms is enough time for the charger to stop; we need to make this as short as possible, since we might be being unplugged and prefer to turn off the pilot signal ourselves
+    Alarm.delay(800); // TODO: (NOTE: 200ms wasn't enough time)... make sure 500ms is enough time for the charger to stop; we need to make this as short as possible, since we might be being unplugged and prefer to turn off the pilot signal ourselves
+    if (g_chargingMode == ChargingModeTimed) {
+        // Give it more time to soft shutdown for sure
+        Alarm.delay(500); // TODO make sure 500ms (half a second) is long enough to wait before we turn off the BMS
+    }
+ 
     // Turn off the pilot signal; this cuts the power to the charger
     setPilotSignalToMode(PILOT_SIGNAL_MODE_OFF);
-    Alarm.delay(500); // TODO make sure 500ms (half a second) is long enough to wait before we turn off the BMS
+    Alarm.delay(250); // TODO make sure 500ms (half a second) is long enough to wait before we turn off the BMS
     
     // Turn off the BMS ONLY if  the proximity signal isn't ignored; otherwise, we may not be able to control the EVSE because we are doing manual 110v charging
     if (!g_ignoreProximitySignal) {
@@ -703,6 +718,9 @@ void loop() {
     
     switch (g_chargingState) {
         case ChargingStateOff:
+            // Make sure the charger is off!
+            setChargerToMode(CHARGER_MODE_OFF);
+            
             // Check to see if we can move to the next charging state
             if (canCharge()) {
                 // We can charge, do it
@@ -716,19 +734,35 @@ void loop() {
             }
             break;
         case ChargingStateWaitingForBMS:
-            // Once we have the BMS High Limit turned off, we can move to the charging state
-            if (!isBMSHighLimitHit()){
+            if (!canCharge()) {
+                // The plug may have been unplugged while we were waiting for the BMS
+                g_chargingState = ChargingStateDoneCharging; // Makes us turn off automatically at this point
+                stopChargingAndTurnOffBMS();
+            } else if (!isBMSHighLimitHit()){
+                // Once we have the BMS High Limit turned off, we can move to the charging state
                 goIntoTheStartChargingState();
             }
             break;
         case ChargingStateCharging:
             // Check to see if we need to stop charging, because the timer stopped, or the proximity switch was flipped
             if (!canCharge()) {
+#if DEBUG
                 g_chargingState = ChargingStateOff;
+#else
+                // Turn off when someone unplugs (can't charge!)
+                g_chargingState = ChargingStateDoneCharging;
+#endif
                 stopChargingAndTurnOffBMS();
             } else if (isBMSHighLimitHit()) {
-                g_chargingState = ChargingStateBalancingCells; // Set the state first, since startBalancingCells updates the status which is based on it
-                startBalancingCells();
+                // Make sure we have really hit it by doing a delay and checking it again; I was seeing false positives
+//                Alarm.delay(200);
+                // TODO: corbin, see if i need this delay still after reworking the HLIM sense
+                if (isBMSHighLimitHit()) {
+                    setChargerToMode(CHARGER_MODE_OFF); // Turn the charger off
+                    
+                    g_chargingState = ChargingStateBalancingCells; // Set the state first, since startBalancingCells updates the status which is based on it
+                    startBalancingCells();
+                }
             }
             break;
         case ChargingStateBalancingCells:
@@ -747,6 +781,12 @@ void loop() {
                 }
                 stopChargingAndTurnOffBMS();
             } else {
+                // Turn the charger on and off based on the HLIM bit
+                if (isBMSHighLimitHit()) {
+                    setChargerToMode(CHARGER_MODE_OFF); // Turn the charger off
+                } else {
+                    setChargerToMode(CHARGER_MODE_ON); // Turn the charger off
+                }
                 // Update the menu where we show how many seconds are left when balancing
                 updateBalancingCellsStatus();
             }
