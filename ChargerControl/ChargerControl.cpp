@@ -196,7 +196,7 @@ static ProximityMode readProximityMode() {
     if (proximityValue > 500) {
         return ProximityModePluggedButNotLatched;
     }
-    if (proximityValue > 300) {
+    if (proximityValue > 250) { // coribn..lowered to 250 from 300 because it wasn't working
         return ProximityModePluggedAndLatched;
     }
     return ProximityModeUnknown;
@@ -602,6 +602,9 @@ static bool canCharge() {
         if (currentTime >= g_startTime && currentTime <= g_endTime) {
             result = true;
         }
+#if DEBUG
+        if  (!reuslt) Serial.println("can't charge due to timed");
+#endif
     } else {
         // Normal charging
         result = true;
@@ -612,6 +615,12 @@ static bool canCharge() {
         // Instead, see if we can charge by looking for the proximity signal to be correct. 
         ProximityMode proximityMode = readProximityMode();
         result = proximityMode == ProximityModePluggedAndLatched;
+#if DEBUG 
+        if (!result) {
+            Serial.
+        }
+        
+#endif
     }
     return result;
 }
@@ -735,10 +744,19 @@ void loop() {
             break;
         case ChargingStateWaitingForBMS:
             if (!canCharge()) {
+#if DEBUG
+                Serial.println("can't charge anymore...turning off");
+                ProximityMode proximityMode = readProximityMode();
+                if (proximityMode != ProximityModePluggedAndLatched) {
+                    Serial.println("can't charge - proximity not latched");
+                } else {
+                    Serial.println("Proxim ok");
+                }
+#endif
                 // The plug may have been unplugged while we were waiting for the BMS
                 g_chargingState = ChargingStateDoneCharging; // Makes us turn off automatically at this point
                 stopChargingAndTurnOffBMS();
-            } else if (!isBMSHighLimitHit()){
+            } else if (!isBMSHighLimitHit()) {
                 // Once we have the BMS High Limit turned off, we can move to the charging state
                 goIntoTheStartChargingState();
             }
@@ -746,12 +764,18 @@ void loop() {
         case ChargingStateCharging:
             // Check to see if we need to stop charging, because the timer stopped, or the proximity switch was flipped
             if (!canCharge()) {
-#if DEBUG
-                g_chargingState = ChargingStateOff;
-#else
                 // Turn off when someone unplugs (can't charge!)
                 g_chargingState = ChargingStateDoneCharging;
+#if DEBUG
+                Serial.println("can't charge anymore...turning off");
+                ProximityMode proximityMode = readProximityMode();
+                if (proximityMode != ProximityModePluggedAndLatched) {
+                    Serial.println("can't charge - proximity not latched");
+                } else {
+                    Serial.println("Proxim ok... why can't we charge??");
+                }
 #endif
+                
                 stopChargingAndTurnOffBMS();
             } else if (isBMSHighLimitHit()) {
                 // Make sure we have really hit it by doing a delay and checking it again; I was seeing false positives
@@ -768,7 +792,7 @@ void loop() {
         case ChargingStateBalancingCells:
             // This state is similar to the charging state (things are still on!)
             if (!canCharge()) {
-                g_chargingState = ChargingStateOff;
+                g_chargingState = ChargingStateDoneCharging;
                 stopChargingAndTurnOffBMS();
             } else if (doneBalancingCells()) {
                 // If we are done...leave the BMS on if we are not using the proxmity signal
@@ -802,7 +826,8 @@ void loop() {
             delay(1000);
             digitalWrite(PIN_ARDUINO_OFF, ARDUINO_MODE_TURN_OFF);
             delay(1000); // Shouldn't need this...
-            // If we get back here, go manually off, so the user can stop again
+            // If we get back here, go manually off, so the user can start again
+            // we might get here if we didn't turn off for some reason (ie: external power still on)
             g_chargingState = ChargingStateManuallyStopped;
             setStandardStatusMessage();
             break;
