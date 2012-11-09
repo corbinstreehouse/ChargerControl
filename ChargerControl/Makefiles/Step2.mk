@@ -528,7 +528,7 @@ $(DEP_FILE):	$(OBJDIR) $(DEPS)
 		@echo "24-" $<
 		@cat $(DEPS) > $(DEP_FILE)
 
-upload:		reset raw_upload
+upload:		make reset raw_upload
 
 
 raw_upload:
