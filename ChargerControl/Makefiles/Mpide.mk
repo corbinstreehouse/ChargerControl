@@ -1,10 +1,10 @@
 #
 # embedXcode
 # ----------------------------------
-# Embedded Computing on Xcode 4.3
+# Embedded Computing on Xcode 4
 #
-# © Rei VILO, 2010-2012
-# CC = BY NC SA
+# Copyright © Rei VILO, 2010-2012
+# Licence CC = BY NC SA
 #
 
 # References and contribution
@@ -16,6 +16,8 @@
 # chipKIT specifics
 # ----------------------------------
 #
+PLATFORM         := MPIDE
+PLATFORM_TAG     := MPIDE=23
 APPLICATION_PATH := /Applications/Mpide.app/Contents/Resources/Java
 
 APP_TOOLS_PATH   := $(APPLICATION_PATH)/hardware/pic32/compiler/pic32-tools/bin
@@ -26,11 +28,13 @@ BOARDS_TXT       := $(APPLICATION_PATH)/hardware/pic32/boards.txt
 # Sketchbook/Libraries path
 # wildcard required for ~ management
 #
-ifeq ($(wildcard ~/Library/Mpide/preferences.txt),)
+ifeq ($(wildcard $(USER_PATH)/Library/Mpide/preferences.txt),)
     $(error Error: run Mpide once and define sketchbook path)
 endif
 
-SKETCHBOOK_DIR = $(shell grep sketchbook.path $(wildcard ~/Library/Mpide/preferences.txt) | cut -d = -f 2)
+ifeq ($(wildcard $(SKETCHBOOK_DIR)),)
+    SKETCHBOOK_DIR = $(shell grep sketchbook.path $(USER_PATH)/Library/Mpide/preferences.txt | cut -d = -f 2)
+endif
 ifeq ($(wildcard $(SKETCHBOOK_DIR)),)
     $(error Error: sketchbook path not found)
 endif
@@ -60,5 +64,5 @@ VARIANT_PATH = $(APPLICATION_PATH)/hardware/pic32/variants/$(VARIANT)
 
 MCU_FLAG_NAME  = mprocessor
 EXTRA_LDFLAGS  = -T$(CORE_LIB_PATH)/$(LDSCRIPT)
-EXTRA_CPPFLAGS = -O2 -mno-smart-io -DARDUINO=23 -D$(BOARD) -I$(VARIANT_PATH)
+EXTRA_CPPFLAGS = -O2 -mno-smart-io -G1024 -D$(PLATFORM_TAG) -D$(BOARD) -I$(VARIANT_PATH)
 

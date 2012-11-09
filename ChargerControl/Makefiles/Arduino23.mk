@@ -1,10 +1,10 @@
 #
 # embedXcode
 # ----------------------------------
-# Embedded Computing on Xcode 4.3
+# Embedded Computing on Xcode 4
 #
-# © Rei VILO, 2010-2012
-# CC = BY NC SA
+# Copyright © Rei VILO, 2010-2012
+# Licence CC = BY NC SA
 #
 
 # References and contribution
@@ -16,6 +16,8 @@
 # Arduino 0023 specifics
 # ----------------------------------
 #
+PLATFORM         := Arduino 
+PLATFORM_TAG     := ARDUINO=23
 APPLICATION_PATH := /Applications/Arduino.app/Contents/Resources/Java
 
 APP_TOOLS_PATH   := $(APPLICATION_PATH)/hardware/tools/avr/bin
@@ -26,11 +28,13 @@ BOARDS_TXT       := $(APPLICATION_PATH)/hardware/arduino/boards.txt
 # Sketchbook/Libraries path
 # wildcard required for ~ management
 #
-ifeq ($(wildcard ~/Library/Arduino/preferences.txt),)
+ifeq ($(USER_PATH)/Library/Arduino/preferences.txt,)
     $(error Error: run Arduino once and define sketchbook path)
 endif
 
-SKETCHBOOK_DIR = $(shell grep sketchbook.path $(wildcard ~/Library/Arduino/preferences.txt) | cut -d = -f 2)
+ifeq ($(wildcard $(SKETCHBOOK_DIR)),)
+    SKETCHBOOK_DIR = $(shell grep sketchbook.path $(USER_PATH)/Library/Arduino/preferences.txt | cut -d = -f 2)
+endif
 ifeq ($(wildcard $(SKETCHBOOK_DIR)),)
    $(error Error: sketchbook path not found)
 endif
@@ -57,8 +61,7 @@ BOARD    = $(call PARSE_BOARD,$(BOARD_TAG),board)
 
 MCU_FLAG_NAME  = mmcu
 EXTRA_LDFLAGS  = 
-EXTRA_CPPFLAGS = 
-
+EXTRA_CPPFLAGS = -D$(PLATFORM_TAG)
 
 
 

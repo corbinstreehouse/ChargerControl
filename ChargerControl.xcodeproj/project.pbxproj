@@ -118,6 +118,7 @@
 		9D11E17F1567561A0002D8A1 /* Licence GNU LGPL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; name = "Licence GNU LGPL.txt"; path = "About/Licence GNU LGPL.txt"; sourceTree = "<group>"; };
 		9D11E1801567561A0002D8A1 /* Licence CC BY-NC-SA.txt */ = {isa = PBXFileReference; lastKnownFileType = text; name = "Licence CC BY-NC-SA.txt"; path = "About/Licence CC BY-NC-SA.txt"; sourceTree = "<group>"; };
 		9D11E29E15675D350002D8A1 /* Libraries */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Libraries; path = ../../../Documents/Arduino/Libraries; sourceTree = "<group>"; };
+		9D5200AD164DAF0E00F3BF4E /* Arduino Leonardo.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = "Arduino Leonardo.xcconfig"; path = "Config/Arduino Leonardo.xcconfig"; sourceTree = "<group>"; };
 		9D77C99F158065C70089EB0A /* Arduino.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Arduino.h; sourceTree = "<group>"; };
 		9D77C9A0158065C70089EB0A /* binary.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = binary.h; sourceTree = "<group>"; };
 		9D77C9A1158065C70089EB0A /* CDC.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = CDC.cpp; sourceTree = "<group>"; };
@@ -486,6 +487,7 @@
 		9D11E1651567561A0002D8A1 /* Config */ = {
 			isa = PBXGroup;
 			children = (
+				9D5200AD164DAF0E00F3BF4E /* Arduino Leonardo.xcconfig */,
 				9D11E1661567561A0002D8A1 /* Arduino mega2560.xcconfig */,
 				9D11E1671567561A0002D8A1 /* Arduino mini pro.xcconfig */,
 				9D11E1681567561A0002D8A1 /* Arduino UNO.xcconfig */,
@@ -1832,6 +1834,7 @@
 				PATH = "$(PATH):$(PROJECT_DIR)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKETCHBOOK_DIR = /corbin/Documents/Arduino;
+				SKETCH_EXTENSION = cpp;
 			};
 			name = Debug;
 		};
@@ -1847,6 +1850,7 @@
 				PATH = "$(PATH):$(PROJECT_DIR)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKETCHBOOK_DIR = /corbin/Documents/Arduino;
+				SKETCH_EXTENSION = cpp;
 			};
 			name = Release;
 		};

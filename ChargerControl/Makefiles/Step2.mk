@@ -1,12 +1,10 @@
 #
 # embedXcode
 # ----------------------------------
-# Embedded Computing on Xcode 4.3
+# Embedded Computing on Xcode 4
 #
-# © Rei VILO, 2010-2012
-# CC = BY NC SA
-#
-# version Apr. 20, 2012 - 21h20
+# Copyright © Rei VILO, 2010-2012
+# Licence CC = BY NC SA
 #
 
 # References and contribution
@@ -15,7 +13,21 @@
 # 
 
 
-include $(MAKEFILE_PATH)/Avrdude.mk 
+include $(MAKEFILE_PATH)/Avrdude.mk
+
+ifneq ($(MAKECMDGOALS),boards)
+ifneq ($(MAKECMDGOALS),build)
+ifneq ($(MAKECMDGOALS),make)
+ifneq ($(MAKECMDGOALS),document)
+ifneq ($(MAKECMDGOALS),clean)
+ifeq ($(AVRDUDE_PORT),)
+    $(error Serial port not available)
+endif
+endif
+endif
+endif
+endif
+endif
 
 ifndef UPLOADER
     UPLOADER = avrdude
@@ -47,12 +59,12 @@ ifdef CORE_LIB_PATH
         CORE_CPP_SRCS = $(wildcard $(CORE_LIB_PATH)/*.cpp) # */
     endif        
 
-    CORE_OBJ_FILES  = $(CORE_C_SRCS:.c=.o) $(CORE_CPP_SRCS:.cpp=.o)
+    CORE_OBJ_FILES  = $(CORE_C_SRCS:.c=.o) $(CORE_CPP_SRCS:.cpp=.o) $(CORE_AS_SRCS:.S=.o) 
     CORE_OBJS       = $(patsubst $(CORE_LIB_PATH)/%,$(OBJDIR)/%,$(CORE_OBJ_FILES))
 endif
 
 
-# APPlication Arduino / chipKIT libraries
+# APPlication Arduino/chipKIT/Wiring/Energia/Maple libraries
 #
 ifndef APP_LIB_PATH
     APP_LIB_PATH  = $(APPLICATION_PATH)/libraries
@@ -129,15 +141,35 @@ OBJS    = $(CORE_OBJS) $(BUILD_CORE_OBJS) $(APP_LIB_OBJS) $(BUILD_APP_LIB_OBJS) 
 DEPS   = $(LOCAL_OBJS:.o=.d)
 
 
+# Processor model and frequency
+# ----------------------------------
+#
+ifndef MCU
+MCU   = $(call PARSE_BOARD,$(BOARD_TAG),build.mcu)
+endif
+
+ifndef F_CPU
+F_CPU = $(call PARSE_BOARD,$(BOARD_TAG),build.f_cpu)
+endif
+
+
 # Rules
 # ----------------------------------
 #
 
 # Main targets
 #
+TARGET_A   = $(OBJDIR)/$(TARGET).a
 TARGET_HEX = $(OBJDIR)/$(TARGET).hex
 TARGET_ELF = $(OBJDIR)/$(TARGET).elf
+TARGET_BIN = $(OBJDIR)/$(TARGET).bin
 TARGETS    = $(OBJDIR)/$(TARGET).*
+
+ifeq ($(PLATFORM),MapleIDE)
+    TARGET_HEXBIN = $(TARGET_BIN)
+else
+    TARGET_HEXBIN = $(TARGET_HEX)
+endif
 
 # List of dependencies
 #
@@ -160,17 +192,24 @@ SYS_OBJS      = $(wildcard $(patsubst %,%/*.o,$(APP_LIBS))) # */
 SYS_OBJS     += $(wildcard $(patsubst %,%/*.o,$(BUILD_APP_LIBS))) # */
 SYS_OBJS     += $(wildcard $(patsubst %,%/*.o,$(USER_LIBS))) # */
 
-CPPFLAGS      = -$(MCU_FLAG_NAME)=$(MCU) -DF_CPU=$(F_CPU) -I. -I$(CORE_LIB_PATH) -DARDUINO=101  \
+CPPFLAGS      = -$(MCU_FLAG_NAME)=$(MCU) -DF_CPU=$(F_CPU) -I$(CORE_LIB_PATH) \
 			$(SYS_INCLUDES) -g -Os -w -Wall -ffunction-sections -fdata-sections $(EXTRA_CPPFLAGS)
+
+ifdef USB_FLAGS
+    CPPFLAGS += $(USB_FLAGS)
+endif    
 
 ifdef USE_GNU99
 CFLAGS        = -std=gnu99
 endif
 
 CXXFLAGS      = -fno-exceptions
-ASFLAGS       = -mmcu=$(MCU) -I. -x assembler-with-cpp
-LDFLAGS       = -$(MCU_FLAG_NAME)=$(MCU) -lm -Wl,--gc-sections -Os $(EXTRA_LDFLAGS)
+ASFLAGS       = -$(MCU_FLAG_NAME)=$(MCU) -x assembler-with-cpp
+LDFLAGS       = -$(MCU_FLAG_NAME)=$(MCU) -lm -Wl,-gc-sections,-u,main -Os $(EXTRA_LDFLAGS)
 
+ifndef OBJCOPYFLAGS
+OBJCOPYFLAGS  = -Oihex -R .eeprom
+endif
 
 # Implicit rules for building everything (needed to get everything in
 # the right directory)
@@ -181,7 +220,7 @@ LDFLAGS       = -$(MCU_FLAG_NAME)=$(MCU) -lm -Wl,--gc-sections -Os $(EXTRA_LDFLA
 # easy to change the build options in future
 
 
-# APPlication library sources
+# APPlication Arduino/chipKIT/Wiring/Energia/Maple library sources
 #
 $(OBJDIR)/libs/%.o: $(APP_LIB_PATH)/%.cpp
 	@echo "1-" $<
@@ -286,6 +325,10 @@ $(OBJDIR)/%.o: $(CORE_LIB_PATH)/%.c
 	@echo "17-" $<
 	$(CC) -c $(CPPFLAGS) $(CFLAGS) $< -o $@
 
+$(OBJDIR)/%.o: $(CORE_LIB_PATH)/%.S
+	@echo "17s-" $<
+	$(CC) -c $(CPPFLAGS) $(CFLAGS) $< -o $@
+
 $(OBJDIR)/%.o: $(CORE_LIB_PATH)/%.cpp
 	@echo "18-" $<
 	$(CXX) -c $(CPPFLAGS) $(CXXFLAGS) $< -o $@
@@ -307,8 +350,12 @@ $(OBJDIR)/libs/%.o: $(VARIANT_PATH)/%.cpp
 # Other object conversions
 #
 $(OBJDIR)/%.hex: $(OBJDIR)/%.elf
-	@echo "19-" $<
-	$(OBJCOPY) -O ihex -R .eeprom $< $@
+	@echo "19hex-" $<
+	$(OBJCOPY) -Oihex -R .eeprom $< $@
+
+$(OBJDIR)/%.bin: $(OBJDIR)/%.elf
+	@echo "19bin-" $<
+	$(OBJCOPY) -Obinary -v $< $@
 
 $(OBJDIR)/%.eep: $(OBJDIR)/%.elf
 	@echo "20-" $<
@@ -329,6 +376,7 @@ $(OBJDIR)/%.sym: $(OBJDIR)/%.elf
 #
 HEXSIZE = $(SIZE) --target=ihex $(CURDIR)/$(TARGET_HEX)
 ELFSIZE = $(SIZE) $(CURDIR)/$(TARGET_ELF)
+BINSIZE = $(SIZE) --target=binary -A $(CURDIR)/$(TARGET_BIN)
 
 
 # Serial monitoring
@@ -346,19 +394,26 @@ SERIAL_BAUDRATE = 9600
 endif
 
 ifndef SERIAL_COMMAND
-SERIAL_COMMAND   = screen
+SERIAL_COMMAND  = screen
 endif
 
 
 # Info for debugging
 # ----------------------------------
 #
-
 # Info
 #
-$(info .    variant		$(VARIANT)) 
 ifneq ($(MAKECMDGOALS),boards)
 ifneq ($(MAKECMDGOALS),clean)
+$(info .    variant		$(VARIANT)) 
+
+ifneq ($(USB_PID),)
+ifneq ($(USB_VID),)
+    $(info .    USB VID	$(USB_VID))
+    $(info .    USB PID	$(USB_PID))
+endif
+endif
+
 $(info  ---- info ----)
 $(info Board)
 $(info .    name		$(call PARSE_BOARD,$(BOARD_TAG),name))
@@ -368,21 +423,76 @@ $(info Ports)
 $(info .    uploader 	$(UPLOADER))
 ifeq ($(UPLOADER),avrdude)
     $(info .    avrdude 	$(AVRDUDE_PORT))
-    $(info .    serial		$(SERIAL_PORT))
 endif
+$(info .    serial		$(SERIAL_PORT))
 $(info  ---- info ----)
-$(info Core libraries)
-$(info .     $(CORE_LIBS_LIST))
+$(info .     Core libraries)
+$(info $(CORE_LIBS_LIST))
 ifneq ($(BUILD_CORE_LIBS_LIST),)
-    $(info .     $(BUILD_CORE_LIBS_LIST))
+    $(info $(BUILD_CORE_LIBS_LIST))
 endif
-$(info Application Arduino/chipKIT/Wiring/Energia libraries)
-$(info .     $(APP_LIBS_LIST))
-$(info User libraries)
-$(info .     $(USER_LIBS_LIST))
+$(info .     Application Arduino/chipKIT/Wiring/Energia/Maple libraries)
+$(info $(APP_LIBS_LIST))
+$(info .     User libraries from $(SKETCHBOOK_DIR))
+$(info $(USER_LIBS_LIST))
 $(info  ---- end ----)
 endif
 endif
+
+
+# Doxygen
+# ----------------------------------
+#
+ifeq ($(MAKECMDGOALS),document)
+    $(info include doxygen makefile)
+    include $(MAKEFILE_PATH)/Doxygen.mk
+endif
+
+document0:
+		@echo "--- doxygen reset ---"
+		@if [ -f $(LOAD_UTIL_PATH) ]; then $(REMOVE) $(LOAD_UTIL_PATH); fi
+		@if [ -f $(DOCSET_PATH) ]; then $(REMOVE) $(DOCSET_PATH); fi
+		@echo "tell application \"Xcode\"" > $(LOAD_UTIL_PATH)
+		@echo "load documentation set with path \"$(DOCSET_PATH)\"" >> $(LOAD_UTIL_PATH)
+		@echo "end tell" >> $(LOAD_UTIL_PATH)
+
+document1:
+		@echo "--- doxygen warnings ---"
+		$(DOXYGEN_PATH) $(DOXYFILE)
+		@echo "---- docset generated ----"
+
+document2:
+ifeq ($(GENERATE_PDF),YES)
+		@if [ -f $(TEX_PATH) ]; then Utilities/pdf.sh > Utilities/pdf.log; echo "---- pdf created ---- "; fi
+endif
+
+document3:
+ifeq ($(GENERATE_DOCSET),YES)
+		@if [ $(shell osascript '$(LOAD_UTIL_PATH)') = true ]; then echo "---- docset loaded ---- "; else echo "---- docset not loaded ---- "; fi; 
+endif
+
+document4:
+ifeq ($(GENERATE_DOCSET),YES)
+		make -C $(DOCUMENTS_PATH)/html install > ./Utilities/docset.log
+		@echo "---- docset installed ----"
+endif
+
+
+
+# !!! .a file
+# ----------------------------------
+#
+
+$(TARGET_ELF): 	$(OBJS)
+		@echo "23-archive"
+		$(AR) rcs $(TARGET_A) $(OBJS)
+		@echo "23-link" 
+ifeq ($(PLATFORM),MapleIDE)
+		$(CXX) $(LDFLAGS) -o $@ $(SYS_OBJS) $(TARGET_A) -L$(OBJDIR)
+else
+		$(CC) $(LDFLAGS) -o $@ $(SYS_OBJS) $(TARGET_A) -lc
+endif
+
 
 
 # Rules
@@ -395,46 +505,68 @@ build: 		clean compile
 
 make:		changed compile
 
-compile:	$(OBJDIR) $(TARGET_HEX) 		
+compile:	$(OBJDIR) $(TARGET_HEXBIN) size
 		@echo " ---- compile ---- "
 		@echo $(BOARD_TAG) > $(NEW_TAG)
-
+       
+info:
+		@echo " ---- info ---- "
 
 $(OBJDIR):
 		@echo " ---- build ---- "
 		mkdir $(OBJDIR)
 
-$(TARGET_ELF): 	$(OBJS)
-		@echo "23-" $<
-		$(CC) $(LDFLAGS) -o $@ $(OBJS) $(SYS_OBJS) -lc
+#$(TARGET_ELF): 	$(OBJS)
+#		@echo "23-" $<
+#ifeq ($(PLATFORM),MapleIDE)
+#		$(CXX) $(LDFLAGS) -o $@ $(OBJS) $(SYS_OBJS) -L$(OBJDIR)
+#else
+#		$(CC) $(LDFLAGS) -o $@ $(OBJS) $(SYS_OBJS) -lc
+#endif
 
 $(DEP_FILE):	$(OBJDIR) $(DEPS)
 		@echo "24-" $<
 		@cat $(DEPS) > $(DEP_FILE)
 
 upload:		reset raw_upload
-#upload:		reset size raw_upload
 
 
-raw_upload:	$(TARGET_HEX)
+raw_upload:
 		@echo " ---- upload ---- "
 ifeq ($(UPLOADER),avrdude)
 		$(AVRDUDE) $(AVRDUDE_COM_OPTS) $(AVRDUDE_OPTS) -Uflash:w:$(TARGET_HEX):i
 else ifeq ($(UPLOADER),mspdebug)
-		$(MSPDEBUG) $(MSPDEBUG_OPTS) "prog $(TARGET_HEX)"
+		$(MSPDEBUG) $(MSPDEBUG_OPTS) "$(MSPDEBUG_COMMAND) $(TARGET_HEX)"
+else ifeq ($(UPLOADER),dfu-util)
+		$(DFU_UTIL) $(DFU_UTIL_OPTS) -D $(TARGET_BIN) -R
+		sleep 4
+		$(info .)
 else
 		$(error No valid uploader)
 endif
+
 
 # stty on MacOS likes -F, but on Debian it likes -f redirecting
 # stdin/out appears to work but generates a spurious error on MacOS at
 # least. Perhaps it would be better to just do it in perl ?
 reset:
 		@echo "---- reset ---- "
-ifeq ($(UPLOADER),avrdude)
-		-screen -X kill;
-		sleep 1;
+		-screen -X kill
+		sleep 1
+ifeq ($(UPLOADER),dfu-util)
+		$(DFU_RESET)
+		sleep 1
 endif
+ifdef USB_RESET
+# Method 1
+		stty -f $(AVRDUDE_PORT) speed 1200
+		sleep 1
+# Method 2
+#		$(USB_RESET) $(AVRDUDE_PORT)
+#		sleep 1
+endif
+
+
 #		@if [ -z "$(AVRDUDE_PORT)" ]; then \
 #			echo "No Arduino-compatible TTY device found -- exiting"; exit 2; \
 #			fi
@@ -463,7 +595,6 @@ serial:		reset
 		@echo "---- serial ---- "
 		osascript -e 'tell application "Terminal" to do script "$(SERIAL_COMMAND) $(SERIAL_PORT) $(SERIAL_BAUDRATE)"'
 		
-
 #		echo "$@"
 #		echo "-- "
 #		export TERM="vt100"
@@ -472,18 +603,18 @@ serial:		reset
 #		chmod 0755 /tmp/arduino.command
 #		open /tmp/arduino.command
 
-
 size:
 		@echo "---- size ---- "
 		@if [ -f $(TARGET_HEX) ]; then $(HEXSIZE); echo; fi
-		@if [ -f $(TARGET_ELF) ]; then $(ELFSIZE); echo; fi
+#		@if [ -f $(TARGET_ELF) ]; then $(ELFSIZE); echo; fi
+		@if [ -f $(TARGET_BIN) ]; then $(BINSIZE); echo; fi
 
 
 clean:
 		@if [ ! -d $(OBJDIR) ]; then mkdir $(OBJDIR); fi
 		@echo "nil" > $(OBJDIR)/nil
 		@echo "---- clean ---- "
-		-@rm -r $(OBJDIR)/* # */
+		-@rm -r $(OBJDIR)/* # */ 
 
 changed:
 ifeq ($(CHANGE_FLAG),1)
@@ -505,6 +636,11 @@ boards:
 		@if [ -d $(MPIDE_APP) ];   then echo "---- $(MPIDE_APP) ---- ";   grep .name $(MPIDE_PATH)/hardware/pic32/boards.txt;     echo; fi
 		@if [ -d $(WIRING_APP) ];  then echo "---- $(WIRING_APP) ---- ";  grep .name $(WIRING_PATH)/hardware/Wiring/boards.txt;   echo; fi
 		@if [ -d $(ENERGIA_APP) ]; then echo "---- $(ENERGIA_APP) ---- "; grep .name $(ENERGIA_PATH)/hardware/msp430/boards.txt;  echo; fi
+		@if [ -d $(MAPLE_APP) ];   then echo "---- $(MAPLE_APP) ---- ";   grep .name $(MAPLE_PATH)/hardware/leaflabs/boards.txt;  echo; fi
 		@echo "---- end ---- "
 
-.PHONY:	all clean depends upload raw_upload reset serial show_boards headers size
+
+document:	document0 document1 document2 document3 document4
+
+                
+.PHONY:	all clean depends upload raw_upload reset serial show_boards headers size document

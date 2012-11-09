@@ -1,10 +1,10 @@
 #
 # embedXcode
 # ----------------------------------
-# Embedded Computing on Xcode 4.3
+# Embedded Computing on Xcode 4
 #
-# © Rei VILO, 2010-2012
-# CC = BY NC SA
+# Copyright © Rei VILO, 2010-2012
+# Licence CC = BY NC SA
 #
 
 # References and contribution
@@ -16,12 +16,22 @@
 # chipKIT specifics
 # ----------------------------------
 #
+PLATFORM         := Energia
+PLATFORM_TAG     := ENERGIA=6
 APPLICATION_PATH := /Applications/Energia.app/Contents/Resources/Java
 
 UPLOADER          = mspdebug
 MSPDEBUG_PATH     = $(APPLICATION_PATH)/hardware/tools
 MSPDEBUG          = $(MSPDEBUG_PATH)/msp430/mspdebug/mspdebug
 MSPDEBUG_OPTS     = rf2500 --force-reset
+
+# FraunchPad MSP430FR5739 requires a specific command
+#
+ifeq ($(BOARD_TAG), lpmsp430fr5739)
+    MSPDEBUG_COMMAND = load
+else
+    MSPDEBUG_COMMAND = prog
+endif
 
 APP_TOOLS_PATH   := $(APPLICATION_PATH)/hardware/tools/msp430/bin
 CORE_LIB_PATH    := $(APPLICATION_PATH)/hardware/msp430/cores/msp430
@@ -31,11 +41,13 @@ BOARDS_TXT       := $(APPLICATION_PATH)/hardware/msp430/boards.txt
 # Sketchbook/Libraries path
 # wildcard required for ~ management
 #
-ifeq ($(wildcard ~/Library/Energia/preferences.txt),)
+ifeq ($(USER_PATH)/Library/Energia/preferences.txt,)
     $(error Error: run Energia once and define sketchbook path)
 endif
 
-SKETCHBOOK_DIR = $(shell grep sketchbook.path $(wildcard ~/Library/Energia/preferences.txt) | cut -d = -f 2)
+ifeq ($(wildcard $(SKETCHBOOK_DIR)),)
+    SKETCHBOOK_DIR = $(shell grep sketchbook.path $(wildcard ~/Library/Energia/preferences.txt) | cut -d = -f 2)
+endif
 ifeq ($(wildcard $(SKETCHBOOK_DIR)),)
     $(error Error: sketchbook path not found)
 endif
@@ -44,7 +56,7 @@ USER_LIB_PATH  = $(wildcard $(SKETCHBOOK_DIR)/Libraries)
 
 # Rules for making a c++ file from the main sketch (.pde)
 #
-PDEHEADER      = \\\#include \"WProgram.h\"  
+PDEHEADER      = \\\#include \"Energia.h\"  
 
 
 # Tool-chain names
@@ -65,6 +77,6 @@ VARIANT_PATH = $(APPLICATION_PATH)/hardware/msp430/variants/$(VARIANT)
 
 MCU_FLAG_NAME  = mmcu
 EXTRA_LDFLAGS  =
-#EXTRA_LDFLAGS  = -T$(CORE_LIB_PATH)/$(LDSCRIPT)
-EXTRA_CPPFLAGS = -DARDUINO=101 -I$(VARIANT_PATH)
+#EXTRA_LDFLAGS = -T$(CORE_LIB_PATH)/$(LDSCRIPT)
+EXTRA_CPPFLAGS = -D$(PLATFORM_TAG) -I$(VARIANT_PATH)
 

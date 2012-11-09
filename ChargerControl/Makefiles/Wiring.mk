@@ -1,10 +1,10 @@
 #
 # embedXcode
 # ----------------------------------
-# Embedded Computing on Xcode 4.3
+# Embedded Computing on Xcode 4
 #
-# © Rei VILO, 2010-2012
-# CC = BY NC SA
+# Copyright © Rei VILO, 2010-2012
+# Licence CC = BY NC SA
 #
 
 # References and contribution
@@ -16,6 +16,8 @@
 # Wiring specifics
 # ----------------------------------
 #
+PLATFORM         := Wiring
+PLATFORM_TAG     := WIRING=100
 APPLICATION_PATH := /Applications/Wiring.app/Contents/Resources/Java
 
 APP_TOOLS_PATH   := $(APPLICATION_PATH)/tools/avr/bin
@@ -26,11 +28,13 @@ BOARDS_TXT       := $(APPLICATION_PATH)/hardware/Wiring/boards.txt
 # Sketchbook/Libraries path
 # wildcard required for ~ management
 #
-ifeq ($(wildcard ~/Library/Wiring/preferences.txt),)
+ifeq ($(USER_PATH)/Library/Wiring/preferences.txt,)
     $(error Error: run Wiring once and define sketchbook path)
 endif
 
-SKETCHBOOK_DIR = $(shell grep sketchbook.path $(wildcard ~/Library/Wiring/preferences.txt) | cut -d = -f 2)
+ifeq ($(wildcard $(SKETCHBOOK_DIR)),)
+    SKETCHBOOK_DIR = $(shell grep sketchbook.path $(USER_PATH)/Library/Wiring/preferences.txt | cut -d = -f 2)
+endif
 ifeq ($(wildcard $(SKETCHBOOK_DIR)),)
     $(error Error: sketchbook path not found)
 endif
@@ -56,7 +60,6 @@ AVRDUDE_PATH      = $(APPLICATION_PATH)/tools
 AVRDUDE           = $(AVRDUDE_PATH)/avr/bin/avrdude
 AVRDUDE_CONF      = $(AVRDUDE_PATH)/avr/bin/avrdude.conf
 AVRDUDE_COM_OPTS  = -D -p$(MCU) -C$(AVRDUDE_CONF)
-
 
 BOARD        = $(call PARSE_BOARD,$(BOARD_TAG),board)
 #LDSCRIPT = $(call PARSE_BOARD,$(BOARD_TAG),ldscript)
@@ -115,4 +118,4 @@ endif
 
 MCU_FLAG_NAME  = mmcu
 EXTRA_LDFLAGS  = 
-EXTRA_CPPFLAGS = -I$(CORE_LIB_PATH) -I$(BUILD_CORE_LIB_PATH) -I$(VARIANT_PATH) 
+EXTRA_CPPFLAGS = -D$(PLATFORM_TAG) -I$(CORE_LIB_PATH) -I$(BUILD_CORE_LIB_PATH) -I$(VARIANT_PATH) 

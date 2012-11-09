@@ -1,10 +1,10 @@
 #
 # embedXcode
 # ----------------------------------
-# Embedded Computing on Xcode 4.3
+# Embedded Computing on Xcode 4
 #
-# © Rei VILO, 2010-2012
-# CC = BY NC SA
+# Copyright © Rei VILO, 2010-2012
+# Licence CC = BY NC SA
 #
 
 # References and contribution
@@ -40,16 +40,6 @@ ifndef ISP_PROG
     ISP_PROG	      = -c stk500v2
 endif
 AVRDUDE_ISP_OPTS  = -P $(ISP_PORT) $(ISP_PROG)
-
-# processor stuff
-#
-ifndef MCU
-MCU   = $(call PARSE_BOARD,$(BOARD_TAG),build.mcu)
-endif
-
-ifndef F_CPU
-F_CPU = $(call PARSE_BOARD,$(BOARD_TAG),build.f_cpu)
-endif
 
 # normal programming info
 #
