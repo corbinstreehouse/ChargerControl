@@ -278,7 +278,7 @@ static void updateTimerTimes() {
     tmElements_t startTimeElements;
     breakTime(g_startTime, startTimeElements);
     // Take the elements from now, and use the hour and minute from when to start (with a 0 second)
-    // However, if the time 
+    // However, if the time
     nowElements.Hour = startTimeElements.Hour;
     nowElements.Minute = startTimeElements.Minute;
     nowElements.Second = 0;
@@ -486,10 +486,6 @@ static inline void setChargerToMode(uint8_t mode) {
 static inline void setPilotSignalToMode(uint8_t mode) {
     digitalWrite(PIN_EVSE_PILOT, mode);
     // We don't wait; the charger won't go on until it has power
-}
-
-static void enableTimer(bool enabled) {
-#warning implement
 }
 
 ChargingState getChargingState();
