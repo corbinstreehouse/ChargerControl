@@ -730,17 +730,12 @@ void loop() {
             if (canCharge()) {
                 // We can charge, do it
                 goIntoTheWaitingForBMSState();
-            } else if (g_chargingMode == ChargingModeTimed) {
-                // If we are timed...see if we should update if we have the plug ready or not
+            }
+            // If we are timed...see if we should update if we have the plug ready or not
+            if (g_chargingMode == ChargingModeTimed) {
                 if (g_lastReadProxMode != readProximityMode()) {
                     setStandardStatusMessage();
                 }
-                // Turn on the power...I need this to be done , otherwise the EVSE shuts off after a certain time (doh!)
-                // however, I hate having to do this, as it turns on the charger
-                setPilotSignalToMode(PILOT_SIGNAL_MODE_ON); // Turns on the EVSE, but the charger isn't on yet...we wait.
-            } else {
-                // Make sure the EVSE is off
-                setPilotSignalToMode(PILOT_SIGNAL_MODE_OFF);
             }
             break;
         case ChargingStateWaitingForBMS:
