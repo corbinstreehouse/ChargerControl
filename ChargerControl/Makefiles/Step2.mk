@@ -503,7 +503,7 @@ all: 		clean build upload serial
 
 build: 		clean compile
 
-make:		changed compile
+make:		clean compile
 
 compile:	$(OBJDIR) $(TARGET_HEXBIN) size
 		@echo " ---- compile ---- "

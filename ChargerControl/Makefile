@@ -34,8 +34,6 @@ APP_LIBS_LIST = Wire Wire/utility EEPROM
 	DWIFIcK DWIFIcK/Utility 
 
 USER_LIBS_LIST = Adafruit_RGB_LCD_Shield_Library Time/Time Time/TimeAlarms Time/DS1307RTC 
-#Adafruit_HX8340B Adafruit_GFX 
-
 
 MAKEFILE_PATH = $(CURDIR)/Makefiles
 

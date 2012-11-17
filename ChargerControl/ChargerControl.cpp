@@ -132,6 +132,9 @@ bool g_ignoreProximitySignal = false; // Turn on to charge off 120v or when you 
 #define PIN_CHARGER_OFF 6  // Turns off the charger when HIGH (by sending 5v to the manzanita micro's pin 2). A safety feature is the 5v signal from pin 1 of the charger is looped to the "normally closed" relay controlled by the BMS "high limit". The BMS opens the circuit to let the charger charge.
 #define PIN_ARDUINO_OFF 7
 #define PIN_EVSE_PROXIMITY A0
+ 
+// corbin!! test
+#define PROXIMITY_5V_OUT_PIN 9
 
 // aliases to make the code more readable when setting values for the pins
 #define BMS_HLIM_REACHED HIGH // When at 5v the BMS has opened the circuit telling us the HLIM was hit
@@ -182,6 +185,11 @@ enum ProximityMode {
  */
 
 static ProximityMode readProximityMode() {
+    ProximityMode result = ProximityModeUnknown;
+    // Turn on the 5v and then read the value
+    digitalWrite(PROXIMITY_5V_OUT_PIN, HIGH);
+    Alarm.delay(20); // Give it a moment (just in case)
+    
     int proximityValue = analogRead(PIN_EVSE_PROXIMITY);
     
 #if DEBUG
@@ -190,16 +198,17 @@ static ProximityMode readProximityMode() {
 #endif
     
     if (proximityValue > 900) {
-        return ProximityModeUnplugged;
-        
+        result = ProximityModeUnplugged;
+    } else if (proximityValue > 500) {
+        result = ProximityModePluggedButNotLatched;
+    } else if (proximityValue > 250) { // corbin..lowered to 250 from 300 because it wasn't working
+        result = ProximityModePluggedAndLatched;
     }
-    if (proximityValue > 500) {
-        return ProximityModePluggedButNotLatched;
-    }
-    if (proximityValue > 250) { // coribn..lowered to 250 from 300 because it wasn't working
-        return ProximityModePluggedAndLatched;
-    }
-    return ProximityModeUnknown;
+    
+    // Turn off the proximity 5v (keeping it on messes with the EVSE)
+    digitalWrite(PROXIMITY_5V_OUT_PIN, LOW);
+    
+    return result;
 }
 
 
@@ -223,6 +232,8 @@ static inline void setInitialPinStates() {
     pinMode(PIN_CHARGING_STATUS, OUTPUT);
     digitalWrite(PIN_CHARGING_STATUS, LOW);
     
+    pinMode(PROXIMITY_5V_OUT_PIN, OUTPUT);
+    digitalWrite(PROXIMITY_5V_OUT_PIN, LOW);
     
 //    pinMode(PIN_EVSE_PROXIMITY, INPUT); // The default value is input, don't bother setting it
 }
@@ -373,22 +384,25 @@ static inline void loadSettings() {
 static void ChargingModeEnter(CrbActionMenuItem *);
 
 
+CrbActionMenuItem *g_itemNormalChargingMode;
+
 static inline void setupMenu() {
     g_lcd.begin(LCD_COLUMNS, LDC_ROWS);
     g_lcd.clear();
     
     g_rootItem = new CrbActionMenuItem(NULL, (CrbMenuItemAction)ChargingModeEnter, 0l);
+    g_rootItem->addOption(CrbMenuItemOptionShowTime);
     
     CrbMenuItem *chargingModeItem = new CrbMenuItem("Charging Mode >");
-    CrbMenuItem *itemNormalChargingMode = new CrbActionMenuItem("Normal charging", (CrbMenuItemAction) ChargingModeChangedAction, ChargingModeNormal);
+    g_itemNormalChargingMode = new CrbActionMenuItem("Normal charging", (CrbMenuItemAction)ChargingModeChangedAction, ChargingModeNormal);
     CrbMenuItem *itemTimedChargingMode = new CrbActionMenuItem("Timed charging", (CrbMenuItemAction)ChargingModeChangedAction, ChargingModeTimed);
     
     g_rootItem->addChild(chargingModeItem);
-    chargingModeItem->addChild(itemNormalChargingMode);
+    chargingModeItem->addChild(g_itemNormalChargingMode);
     chargingModeItem->addChild(itemTimedChargingMode);
     
     if (g_chargingMode == ChargingModeNormal) {
-        itemNormalChargingMode->addOption(CrbMenuItemOptionSelected);
+        g_itemNormalChargingMode->addOption(CrbMenuItemOptionSelected);
     } else { // timed
         itemTimedChargingMode->addOption(CrbMenuItemOptionSelected);
     }
@@ -398,11 +412,11 @@ static inline void setupMenu() {
     g_rootItem->addChild(itemSetStartTime);
     itemSetStartTime->addChild(new CrbTimeSetMenuItem("Start time", (CrbMenuItemAction)ChargingSaveStartTimeAction, &g_startTime));
 
-    CrbMenuItem *itemTimerDuration = new CrbMenuItem("Set timer duration >");
+    CrbMenuItem *itemTimerDuration = new CrbMenuItem("Set duration >");
     g_rootItem->addChild(itemTimerDuration);
     itemTimerDuration->addChild(new CrbDurationMenuItem("Duration", (CrbMenuItemAction)ChargingSaveDurationAction, &g_duration));
 
-    CrbMenuItem *balanceDuration = new CrbMenuItem("Balance duration >");
+    CrbMenuItem *balanceDuration = new CrbMenuItem("Balance time >");
     g_rootItem->addChild(balanceDuration);
     balanceDuration->addChild(new CrbNumberEditMenuItem("Balance in mins", (CrbMenuItemAction)mnuSaveBalanceDurationAction, &g_balanceDuration));
 
@@ -416,9 +430,9 @@ static inline void setupMenu() {
     CrbTimeSetMenuItem *timeSetItem = new CrbTimeSetMenuItem("Set the time", (CrbMenuItemAction)setCurrentTimeAction, NULL);
     itemSetTime->addChild(timeSetItem);
     
-    CrbMenuItem *itemIgnoreProximitySignal = new CrbMenuItem("Ignore proximity signal >");
+    CrbMenuItem *itemIgnoreProximitySignal = new CrbMenuItem("Ignore prox");
     g_rootItem->addChild(itemIgnoreProximitySignal);
-    itemIgnoreProximitySignal->addChild(new CrbActionMenuItem("Enter to flip", (CrbMenuItemAction)mnuIgnoreProximityStateAction, 0));
+    itemIgnoreProximitySignal->addChild(new CrbActionMenuItem("Ignore prox: OFF", (CrbMenuItemAction)mnuIgnoreProximityStateAction, 0));
     
 #if ADD_TURN_OFF_MENU_ITEM
     CrbMenuItem *itemTurnOff = new CrbMenuItem("Turn off >");
@@ -525,14 +539,11 @@ void updateBalancingCellsStatus() {
     
 }
 
-ProximityMode g_lastReadProxMode = ProximityModeUnknown;
-
 void setStandardStatusMessage() {
- 
     ChargingState currentChargingState = getChargingState();
     if (currentChargingState == ChargingStateWaitingForBMS) {
         g_rootItem->setName("Waiting for BMS");
-        g_rootItem->setSecondLineMessage("...high limit on");
+        g_rootItem->setSecondLineMessage(NULL);
     } else if (currentChargingState == ChargingStateCharging) {
         g_rootItem->setName("Charging...");
         if (g_chargingMode == ChargingModeNormal) {
@@ -555,14 +566,9 @@ void setStandardStatusMessage() {
         updateBalancingCellsStatus();
     } else if (g_chargingMode == ChargingModeNormal) {
         g_rootItem->setName("Waiting for plug");
-        g_rootItem->setSecondLineMessage(" -> Settings");
+        g_rootItem->setSecondLineMessage(NULL);
     } else if (g_chargingMode == ChargingModeTimed) {
-        g_lastReadProxMode = readProximityMode();
-        if (g_lastReadProxMode == ProximityModePluggedAndLatched) {
-            g_rootItem->setName("Timer set:");
-        } else {
-            g_rootItem->setName("Timer: Unplugged car!");
-        }
+        g_rootItem->setName("Timer set:");
         time_t endTime = getChargingEndTime();
         // Make sure you don't overrun this buffer!
         sprintf(g_timeBuffer, "%02u:%02u%s-%02u:%02u%s", hourFormat12(g_startTime), minute(g_startTime), amOrPmStringForTime(g_startTime), hourFormat12(endTime), minute(endTime), amOrPmStringForTime(endTime));
@@ -598,9 +604,6 @@ static bool canCharge() {
         if (currentTime >= g_startTime && currentTime <= g_endTime) {
             result = true;
         }
-#if DEBUG
-        if  (!reuslt) Serial.println("can't charge due to timed");
-#endif
     } else {
         // Normal charging
         result = true;
@@ -608,15 +611,9 @@ static bool canCharge() {
     
     if (result && !g_ignoreProximitySignal) {
         // Ideally we should look for the 12v pilot signal. I don't have anything that reads the signal. It would be interesting to see if the current passing through the signal is less than 40mA. If it is, the arduino pin can be set as an OUTPUT and sink the current (I think this means take it to ground). notes http://arduino.cc/en/Tutorial/DigitalPins
-        // Instead, see if we can charge by looking for the proximity signal to be correct. 
+        // Instead, see if we can charge by looking for the proximity signal to be correct.
         ProximityMode proximityMode = readProximityMode();
         result = proximityMode == ProximityModePluggedAndLatched;
-#if DEBUG 
-        if (!result) {
-            Serial.
-        }
-        
-#endif
     }
     return result;
 }
@@ -684,6 +681,9 @@ static void ChargingModeEnter(CrbActionMenuItem *) {
         // Go back to off, and re-enable the timer (or start charging again)
         g_chargingState = ChargingStateOff;
         setStandardStatusMessage();
+    } else if (g_chargingMode == ChargingModeTimed) {
+        // Go out of timed and back to normal (this is a quick shortcut)
+        ChargingModeChangedAction(g_itemNormalChargingMode);
     }
 }
 
@@ -703,6 +703,12 @@ static void mnuTurnOff(CrbMenuItem *sender) {
 
 static void mnuIgnoreProximityStateAction(CrbMenuItem *sender) {
     g_ignoreProximitySignal = !g_ignoreProximitySignal;
+    if (g_ignoreProximitySignal) {
+        sender->setName("Ignore prox: ON");
+    } else {
+        sender->setName("Ignore prox: OFF");
+    }
+    g_menu.print(); // Update to show the change
 }
 
 static inline void goIntoTheWaitingForBMSState() {
@@ -732,11 +738,9 @@ void loop() {
                 goIntoTheWaitingForBMSState();
             }
             // If we are timed...see if we should update if we have the plug ready or not
-            if (g_chargingMode == ChargingModeTimed) {
-                if (g_lastReadProxMode != readProximityMode()) {
-                    setStandardStatusMessage();
-                }
-            }
+//            if (g_chargingMode == ChargingModeTimed) {
+//                setStandardStatusMessage();
+//            }
             break;
         case ChargingStateWaitingForBMS:
             if (!canCharge()) {

@@ -340,18 +340,12 @@ UsedLibrary="/Applications/EAGLE-6.2.0/lbr/zilog.lbr"
 UsedLibrary="ChargerControlLibrary.lbr"
 
 [Win_1]
-Type="Control Panel"
-Loc="247 326 846 725"
-State=2
-Number=0
-
-[Win_2]
-Type="Board Editor"
+Type="Library Editor"
 Loc="640 410 1239 809"
 State=2
 Number=1
-File="ChargerControlSchematicV1.brd"
-View="-93.7273 -10.9594 103.799 91.3658"
+File="ChargerControlLibrary.lbr"
+View="-0.508 -0.508 25.908 25.908"
 WireWidths=" 0 0.254 0.3048 0.6096 0.8128 1.016 1.27 1.4224 1.6764 1.778 1.9304 2.1844 2.54 3.81 6.4516 0.4064"
 PadDiameters=" 0.254 0.3048 0.4064 0.6096 0.8128 1.016 1.27 1.4224 1.6764 1.778 1.9304 2.1844 2.54 3.81 6.4516 0"
 PadDrills=" 0.5 0.6 0.7 0.9 1 1.1 1.2 1.3 1.4 1.5 1.6 2 2.2 2.8 3.2 0.8"
@@ -370,7 +364,7 @@ MiterStyle=0
 PadShape=0
 ViaShape=0
 PolygonPour=0
-PolygonRank=1
+PolygonRank=0
 PolygonThermals=1
 PolygonOrphans=0
 TextRatio=8
@@ -384,11 +378,17 @@ AddLevel=2
 PadsSameType=0
 Layer=16
 
+[Win_2]
+Type="Control Panel"
+Loc="247 326 846 725"
+State=2
+Number=0
+
 [Win_3]
 Type="Schematic Editor"
-Loc="132 61 2201 1300"
+Loc="84 22 2045 1283"
 State=2
-Number=2
+Number=3
 File="ChargerControlSchematicV1.sch"
 View="-62.3704 -17.4312 271.167 202.174"
 WireWidths=" 0 0.3048 0.6096 0.8128 1.016 1.27 1.4224 1.6764 1.778 1.9304 2.1844 2.54 3.81 6.4516 0.4064 0.1524"

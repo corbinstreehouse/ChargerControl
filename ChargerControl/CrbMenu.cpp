@@ -83,11 +83,18 @@ void CrbMenuItem::printLine1(Adafruit_RGBLCDShield *lcd) {
 
 }
 
+static void _CrbPrintTime(time_t time, Adafruit_RGBLCDShield *lcd, bool includeSecond, bool includeAMPM);
+
 void CrbMenuItem::printLine2(Adafruit_RGBLCDShield *lcd) {
     lcd->setCursor(0,1);
     // Prefer whatever message we have stored
     if (_secondLineMessage) {
         lcd->print(_secondLineMessage);
+    } else if (hasOption(CrbMenuItemOptionShowTime)) {
+        _CrbPrintTime(now(), lcd, true, true);
+        if (this->getChild()) {
+            lcd->print("   >");
+        }
     }
     // Otherwise, say our navigation status (if we are in the menu system)
     else if (this->getPrior() && this->getNext()) {
@@ -110,6 +117,13 @@ void CrbMenuItem::printLine2(Adafruit_RGBLCDShield *lcd) {
             lcd->print("    [Down|Enter]");
         }
     }    
+}
+
+void CrbMenuItem::tick(CrbMenu *sender) {
+    // show time when second line is empty
+    if (this->hasOption(CrbMenuItemOptionShowTime) && this->_secondLineMessage == NULL) {
+        this->printLine2(sender->getLCD());
+    }
 }
 
 

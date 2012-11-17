@@ -24,6 +24,7 @@ class CrbMenuItem;
 enum _CrbMenuItemOptions {
     // Selected items will have a * before the name to show it as selected
     CrbMenuItemOptionSelected = 1 << 0,
+    CrbMenuItemOptionShowTime = 1 << 1,
 //    ChargingModeDisabled = 1 << 2,
 //    ChargingModeNotSet = 255,
 };
@@ -83,7 +84,7 @@ protected:
     virtual void printLine2(Adafruit_RGBLCDShield *lcd);
     
     // Called each loop() when active
-    virtual void tick(CrbMenu *sender) { }
+    virtual void tick(CrbMenu *sender);
     virtual void willBeShown(CrbMenu *sender) { } // Called once when the menu item is shown to allow it to udpate things
 
     int totalColumnCount();
